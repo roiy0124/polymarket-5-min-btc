@@ -1,0 +1,3 @@
+# collector.py and peek.py use only the Python standard library (no install needed).
+# ws_collector.py (the real-time WebSocket layer) needs:
+websockets>=12.0
