@@ -3,11 +3,20 @@
 A high-level history of what's been built. Newest first. (Per-commit detail is in
 `git log`; the deep-research findings behind decisions are in the `*.md` docs.)
 
+## Execution — Phase 1 signal finder (`analysis/signals.py`)
+- Finds limit-order signals from the exit-map data that clear user floors (min
+  win-rate AND min ROI) in ALL THREE lookbacks (**6h / 12h / 24h**). Salvages a line
+  by shrinking the buy-window (≥30s) and/or lowering the sell price `T`; ranks by
+  the sweet spot (worst-case-win × ROI). `--min-entry` drops illiquid penny tokens.
+  Sizes `shares = X_usd / z`. Outputs a ranked table + `signals.json`. Read-only;
+  manual validation gates Phase 2 (the executor — not built yet).
+
 ## Operator & data management
 - **`menu.py`** — interactive operator menu wrapping everything (inspect, generate
-  maps/charts, run analyses, paper-trade, start/stop collectors). Single entry point.
+  maps/charts, run analyses, **Phase-1 signal finder**, paper-trade, start/stop
+  collectors). Single entry point.
   *(Named `menu.py`, not `operator.py` — that would shadow the stdlib `operator`.)*
-- **Create new database** (menu 15) — archives the current DB into `old_dbs/` and
+- **Create new database** (menu 16) — archives the current DB into `old_dbs/` and
   starts a fresh one; collectors auto-restart.
 - **Analysis scope** — every analysis asks `current DB` vs `last X days`; the
   latter merges the current DB + every archive in `old_dbs/` (env `BTC_ANALYSIS_DAYS`).

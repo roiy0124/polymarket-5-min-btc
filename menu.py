@@ -116,6 +116,16 @@ def a_combo_ev():
     run([PY, "-m", "analysis.combo_ev", "--min-n", n, "--fee", fee], env_extra=scope)
 
 
+def a_signals():
+    scope = ask_scope()
+    win = ask("min win-rate (e.g. 0.70)", 0.70)
+    roi = ask("min ROI (e.g. 0.50)", 0.50)
+    usd = ask("bet USD per trade", 2)
+    entry = ask("min entry price", 0.10)
+    run([PY, "-m", "analysis.signals", "--min-win", win, "--min-roi", roi,
+         "--usd", usd, "--min-entry", entry], env_extra=scope)
+
+
 def a_paper():
     o = ask("outcome (up/down)", "down")
     p = ask("entry price", 0.22)
@@ -199,17 +209,18 @@ MENU = [
     ("5", "Generate exit maps (per entry price)", a_exit_maps),
     ("6", "Generate round charts (backfill)", a_round_charts),
     ("ANALYSIS", None),
-    ("7", "Calibration test (price vs outcome)", a_calibration),
-    ("8", "Fair-value vs market (underreaction)", a_fairvalue),
-    ("9", "Reversion screen (dip -> recover)", a_reversion),
-    ("10", "Combo EV scan", a_combo_ev),
+    ("7", "Phase-1 SIGNAL FINDER (win/ROI floors -> signals.json)", a_signals),
+    ("8", "Calibration test (price vs outcome)", a_calibration),
+    ("9", "Fair-value vs market (underreaction)", a_fairvalue),
+    ("10", "Reversion screen (dip -> recover)", a_reversion),
+    ("11", "Combo EV scan", a_combo_ev),
     ("EXECUTION (paper)", None),
-    ("11", "Paper-trade a limit order", a_paper),
-    ("12", "Execution engine self-test", a_selftest),
+    ("12", "Paper-trade a limit order", a_paper),
+    ("13", "Execution engine self-test", a_selftest),
     ("SERVICES", None),
-    ("13", "Start collectors", a_start),
-    ("14", "Stop collectors", a_stop),
-    ("15", "Create NEW database (archive current -> old_dbs/)", a_new_database),
+    ("14", "Start collectors", a_start),
+    ("15", "Stop collectors", a_stop),
+    ("16", "Create NEW database (archive current -> old_dbs/)", a_new_database),
 ]
 ACTIONS = {row[0]: row[2] for row in MENU if row[1] is not None}
 

@@ -1,8 +1,8 @@
 """Phase 1 — signal finder.
 
 Finds the most promising limit-order signals from the exit-map data, kept only if
-they clear YOUR floors (min win-rate AND min ROI) in ALL THREE lookbacks (last 2h,
-6h, 1d). A signal = {side, entry price z, buy-window [t1,t2] (>=30s), sell price T}.
+they clear YOUR floors (min win-rate AND min ROI) in ALL THREE lookbacks (last 6h,
+12h, 24h). A signal = {side, entry price z, buy-window [t1,t2] (>=30s), sell price T}.
 
 To salvage a line before dropping it, the search may BOTH shrink the buy-window
 (down to 30s) AND lower the sell price T (lower T -> more entries reach it -> higher
@@ -30,7 +30,7 @@ import argparse
 from . import panel
 from .exit_maps import entry_and_exit, WINDOW, BUY_WIN_MIN_WIDTH, BUY_WIN_STEP
 
-LOOKBACKS = [("2h", 2 * 3600), ("6h", 6 * 3600), ("1d", 24 * 3600)]
+LOOKBACKS = [("6h", 6 * 3600), ("12h", 12 * 3600), ("24h", 24 * 3600)]
 OUT_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "signals.json")
 
@@ -112,8 +112,7 @@ def find_signal(dots, z, cuts, min_win, min_roi, min_dots):
         return None
     _, t1, t2, T, reaches, roi = best
     return {"t1": t1, "t2": t2, "sell": round(T, 3), "roi": roi,
-            "win_2h": reaches[0], "win_6h": reaches[1], "win_1d": reaches[2],
-            "score": min(reaches) * roi, "n_2h": None}
+            "wins": [round(r, 4) for r in reaches], "score": min(reaches) * roi}
 
 
 def main():
@@ -122,20 +121,25 @@ def main():
     ap.add_argument("--min-roi", type=float, default=0.50, dest="min_roi")
     ap.add_argument("--usd", type=float, default=2.0)
     ap.add_argument("--min-dots", type=int, default=5, dest="min_dots")
+    ap.add_argument("--min-entry", type=float, default=0.10, dest="min_entry",
+                    help="skip entry prices below this (drops illiquid penny tokens)")
     args = ap.parse_args()
 
     now = time.time()
     cuts = [(name, now - secs) for name, secs in LOOKBACKS]
+    lbnames = "/".join(n for n, _ in LOOKBACKS)
     conn = panel.connect()
     windows = load(conn)
     conn.close()
 
     print(f"Signal finder  |  floors: win>= {args.min_win:.0%}  ROI>= {args.min_roi:+.0%}"
-          f"  |  bet ${args.usd:g}  |  robust across 2h/6h/1d  |  {len(windows)} windows")
+          f"  |  bet ${args.usd:g}  |  entry>= {args.min_entry:.2f}  |  robust across "
+          f"{lbnames}  |  {len(windows)} windows")
 
+    lo = max(1, int(round(args.min_entry * 100)))
     signals = []
     for side in ("up", "down"):
-        for cent in range(1, 50):     # entry < 0.50 (need room to sell higher)
+        for cent in range(lo, 50):     # entry in [min_entry, 0.50)
             z = cent / 100.0
             d = dots_for(windows, side, cent)
             sig = find_signal(d, z, cuts, args.min_win, args.min_roi, args.min_dots)
@@ -149,13 +153,14 @@ def main():
         print("\n  no signals cleared the floors in all three lookbacks.")
         print("  -> lower --min-win / --min-roi, lower --min-dots, or collect more data.")
         return
+    win_hdr = "".join(f"{('w'+n):>6}" for n, _ in LOOKBACKS)
     print(f"\n  {len(signals)} signal(s):")
     print(f"  {'side':>4} {'entry':>5} {'buy(min)':>9} {'sell':>5} {'shares':>6} "
-          f"{'ROI':>6} {'win2h':>6} {'win6h':>6} {'win1d':>6} {'score':>6}")
+          f"{'ROI':>6}{win_hdr} {'score':>6}")
     for s in signals:
+        wins = "".join(f"{w:>6.0%}" for w in s["wins"])
         print(f"  {s['side']:>4} {s['entry']:>5.2f} {s['t1']:>4.2g}-{s['t2']:<4.2g} "
-              f"{s['sell']:>5.2f} {s['shares']:>6.2g} {s['roi']:>+6.0%} "
-              f"{s['win_2h']:>6.0%} {s['win_6h']:>6.0%} {s['win_1d']:>6.0%} "
+              f"{s['sell']:>5.2f} {s['shares']:>6.2g} {s['roi']:>+6.0%}{wins} "
               f"{s['score']:>+6.2f}")
     with open(OUT_JSON, "w") as f:
         json.dump({"generated": now, "min_win": args.min_win, "min_roi": args.min_roi,
