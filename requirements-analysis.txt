@@ -1,0 +1,11 @@
+# Optional — only for the (future) analysis layer, NOT the collectors.
+# The collectors run on the stdlib; install these in a venv when you start
+# analysing the data. See DATA-ANALYSIS-TOOLKIT.md for what each is for.
+pandas
+numpy
+scipy
+statsmodels          # OLS + HAC/Newey-West SEs, ADF, ACF/PACF, variance-ratio
+scikit-learn         # TimeSeriesSplit(gap=...), calibration, Brier, log-loss
+arch                 # block/stationary bootstraps, SPA/StepM/MCS, GARCH/realized-vol
+skfolio              # open CombinatorialPurgedCV (CPCV) — mlfinlab is now paid
+matplotlib           # diagnostics / reliability diagrams
