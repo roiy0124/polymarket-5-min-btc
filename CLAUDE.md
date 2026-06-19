@@ -74,7 +74,8 @@ adapter is a clean future drop-in in `feeds.py`.
 | `storage.py` | SQLite schema + writers. Tables: `windows`, `snapshots` (REST) + `book_events`, `trades`, `btc_ticks` (WS). |
 | `collector.py` | REST loop + fallback: discover live window → snapshot → capture strike/final → settle closed windows. Tunables are constants at the top. |
 | `ws_collector.py` | Async WebSocket layer: market-channel events + Binance bookTicker → buffered batch writes. Watchdog reconnect. Needs `websockets`. |
-| `peek.py` | Read-only inspection (`python peek.py`, `python peek.py windows`). |
+| `peek.py` | Read-only CLI inspection (`python peek.py`, `python peek.py windows`). |
+| `viewer.py` | Live browser dashboard (stdlib http.server) at `http://127.0.0.1:8765`. Read-only. |
 
 ### Data model (`btc_updown.db`, SQLite — gitignored)
 

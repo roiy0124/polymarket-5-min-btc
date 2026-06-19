@@ -42,6 +42,7 @@ python collector.py        # REST fallback + per-window strike/final/resolution
 python ws_collector.py     # real-time WebSocket: every book event + trade + BTC tick
 python peek.py             # summary (incl. ws stream counts)
 python peek.py windows     # one row per 5-min market (strike / final / resolution)
+python viewer.py           # live dashboard at http://127.0.0.1:8765 (auto-refresh)
 ```
 
 `collector.py` and `peek.py` are pure standard library; `ws_collector.py` needs
@@ -82,5 +83,8 @@ predicts the official result. A Chainlink adapter can drop into `feeds.py` later
 - `storage.py` — SQLite schema + writers (REST tables + WS stream tables)
 - `collector.py` — REST loop + fallback (windows/strike/final/resolution)
 - `ws_collector.py` — real-time WebSocket capture (book events, trades, BTC ticks)
-- `peek.py` — inspect captured data
+- `peek.py` — inspect captured data (CLI)
+- `viewer.py` — live browser dashboard (zero-dep, stdlib http.server)
 - `requirements.txt` — `websockets` (for `ws_collector.py`)
+- `ANALYSIS.md` — methodology blueprint for the analysis layer
+- `STRATEGY-MEAN-REVERSION.md` — assessment of the buy-the-dip/reversion idea
