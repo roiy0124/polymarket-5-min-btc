@@ -129,10 +129,13 @@ def main():
                     break
                 time.sleep(0.5)
             if market:
-                storage.upsert_window(conn, market, end, loop_t)
                 joined_late = time_left < STRIKE_MIN_LEFT
-                if joined_late:
-                    storage.mark_partial(conn, start)
+                try:
+                    storage.upsert_window(conn, market, end, loop_t)
+                    if joined_late:
+                        storage.mark_partial(conn, start)
+                except Exception as e:
+                    print(f"[{time.strftime('%H:%M:%S')}] window-register error: {e!r}", flush=True)
                 print(f"[{time.strftime('%H:%M:%S')}] live window {start} "
                       f"({market.get('slug')})"
                       f"{'  [joined mid-window]' if joined_late else ''}", flush=True)
@@ -150,28 +153,32 @@ def main():
             except Exception:
                 market = None
 
-        if market is not None:
-            tick = fetch_tick(pool, market)
-            up = tick["up"] or {}
-            down = tick["down"] or {}
-            binance = tick["binance"]
-            pyth = tick["pyth"]
+        try:
+            if market is not None:
+                tick = fetch_tick(pool, market)
+                up = tick["up"] or {}
+                down = tick["down"] or {}
+                binance = tick["binance"]
+                pyth = tick["pyth"]
 
-            storage.insert_snapshot(conn, start, loop_t, loop_utc, time_left,
-                                    up, down, binance, pyth)
+                storage.insert_snapshot(conn, start, loop_t, loop_utc, time_left,
+                                        up, down, binance, pyth)
 
-            # strike = first reading near the start of the window
-            if not strike_set and time_left >= STRIKE_MIN_LEFT and binance is not None:
-                storage.set_strike(conn, start, binance, pyth, loop_t)
-                strike_set = True
+                # strike = first reading near the start of the window
+                if not strike_set and time_left >= STRIKE_MIN_LEFT and binance is not None:
+                    storage.set_strike(conn, start, binance, pyth, loop_t)
+                    strike_set = True
 
-            # final = last reading just before the close
-            if not final_set and time_left <= 1.0 and binance is not None:
-                storage.set_final(conn, start, binance, pyth, loop_t)
-                final_set = True
+                # final = last reading just before the close
+                if not final_set and time_left <= 1.0 and binance is not None:
+                    storage.set_final(conn, start, binance, pyth, loop_t)
+                    final_set = True
 
-        # --- settle closed windows --------------------------------------------
-        _settle(conn, pending_settle, loop_t)
+            # --- settle closed windows ----------------------------------------
+            _settle(conn, pending_settle, loop_t)
+        except Exception as e:
+            # never let a transient DB/network error kill the collector
+            print(f"[{time.strftime('%H:%M:%S')}] loop error (continuing): {e!r}", flush=True)
 
         # --- sleep until next tick --------------------------------------------
         interval = TAIL_INTERVAL if time_left <= TAIL_SECONDS else POLL_INTERVAL
