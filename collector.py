@@ -34,7 +34,7 @@ WINDOW_SECONDS = 300            # 5 minutes
 POLL_INTERVAL = 1.0            # normal cadence (seconds)
 TAIL_SECONDS = 20.0            # within this much of the close, poll faster
 TAIL_INTERVAL = 0.3           # cadence inside the tail
-STRIKE_MIN_LEFT = 295.0       # only trust strike if captured this close to start
+STRIKE_MIN_LEFT = 298.0       # only trust strike if captured this close to start (<=2s)
 SETTLE_RETRY_EVERY = 10.0     # how often to retry fetching official resolution
 SETTLE_GIVEUP_AFTER = 600.0   # stop trying to settle a window after 10 min
 # -----------------------------------------------------------------------------
