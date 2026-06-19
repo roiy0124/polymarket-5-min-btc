@@ -3,8 +3,10 @@
 For every entry price z (1c..99c) and each side (up/down), plot one dot per window:
   x = WHEN you entered (the first moment that window's token price hit z), in
       minutes into the 5-minute round (0..5).
-  y = the BEST price you could have sold at afterward in the SAME window
-      (the highest mid reached after entry, before the round ended).
+  y = the realized EXIT value: the best price you could have SOLD at afterward in
+      the same window (highest mid after entry), OR -- if there was no real bounce
+      above entry -- the resolution value: 1.0 if that side won, 0.0 if it lost.
+      So a "couldn't sell" loss sits at 0 (complete loss), a held win at 1.0.
   color = the window's final outcome: green = resolved Up, red = resolved Down.
 
 Output: exit_maps/up/entry_NNc.png and exit_maps/down/entry_NNc.png  (99 each).
@@ -24,6 +26,7 @@ import matplotlib.pyplot as plt
 from . import panel
 
 WINDOW = 300.0
+SELL_THRESHOLD = 0.01   # the price must clear entry by this much to count as a real exit
 OUTDIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "exit_maps")
 
@@ -49,20 +52,28 @@ def load_windows(conn):
     return out
 
 
-def entry_and_best(path, cent):
-    """First entry into the 1c bucket for `cent`, then max mid afterward.
-    Returns (entry_elapsed_min, best_mid) or None."""
+def entry_and_exit(path, cent, won):
+    """First entry into the 1c bucket for `cent`, then the realized EXIT value:
+      - if the price later rose above entry by >= SELL_THRESHOLD, you could have
+        sold the bounce -> exit = that best subsequent mid;
+      - otherwise there was no sellable bounce, so you hold to resolution ->
+        exit = 1.0 if this side won, else 0.0 (a complete loss sits at zero).
+    Returns (entry_elapsed_min, exit_value) or None.
+    floor into a uniform 1c bucket [cent, cent+1) -- NOT round(), whose banker's
+    rounding (.5 -> even) leaves odd-cent charts artificially empty."""
     idx = None
     for i, (_, mid) in enumerate(path):
-        # floor into a uniform 1c bucket [cent, cent+1) -- NOT round(), whose
-        # banker's rounding (.5 -> even) leaves odd-cent charts artificially empty.
         if int(mid * 100 + 1e-6) == cent:
             idx = i
             break
     if idx is None:
         return None
-    best = max(mid for _, mid in path[idx:])
-    return path[idx][0], best
+    entry_x, entry_p = path[idx]
+    after = [mid for _, mid in path[idx + 1:]]
+    best_after = max(after) if after else entry_p
+    if best_after >= entry_p + SELL_THRESHOLD:
+        return entry_x, best_after            # a real bounce you could sell into
+    return entry_x, (1.0 if won else 0.0)     # no exit -> resolution (0 = loss)
 
 
 def make_plot(side, cent, dots, outpath):
@@ -83,7 +94,7 @@ def make_plot(side, cent, dots, outpath):
     ax.set_xlim(0, 5)
     ax.set_ylim(0, 1)
     ax.set_xlabel("entry time (min into the 5-min round)")
-    ax.set_ylabel("best sell price after entry (same window)")
+    ax.set_ylabel("exit value (sell bounce, else 1=win / 0=loss at resolution)")
     ax.set_title(f"{side.upper()} token  |  entry @ {cent}c  |  n={len(dots)}")
     ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
     ax.grid(True, alpha=0.15)
@@ -103,7 +114,8 @@ def main():
         for cent in range(1, 100):
             dots = []
             for w in windows:
-                eb = entry_and_best(w[side], cent)
+                won = (w["outcome"] == "Up") if side == "up" else (w["outcome"] == "Down")
+                eb = entry_and_exit(w[side], cent, won)
                 if eb is None:
                     continue
                 x, y = eb
