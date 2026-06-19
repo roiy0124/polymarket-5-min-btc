@@ -11,3 +11,4 @@ STOP
 exit_maps/
 round_charts/*.png
 round_charts/**/*.png
+signals.json
