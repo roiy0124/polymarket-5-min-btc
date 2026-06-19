@@ -22,6 +22,7 @@ import json
 import argparse
 
 from . import panel
+from .flow import flow_imbalance
 from exec_engine.config import SafetyConfig
 from exec_engine.broker import PaperBroker
 from exec_engine.order_manager import OrderManager
@@ -48,7 +49,8 @@ def queue_ahead(conn, token, price, before_ts, tick=0.01):
     return total
 
 
-def run_side(conn, ws, side, token, outcome, entry, exit_p, min_left, notional, cfg):
+def run_side(conn, ws, side, token, outcome, entry, exit_p, min_left, notional, cfg,
+             max_toxicity=None, lookback=60.0):
     col = "up_mid" if side == "up" else "down_mid"
     snaps = conn.execute(
         f"SELECT ts, time_left, {col} FROM snapshots WHERE window_start=? AND {col} "
@@ -60,6 +62,12 @@ def run_side(conn, ws, side, token, outcome, entry, exit_p, min_left, notional, 
             break
     if entry_ts is None:
         return None   # no opportunity this window/side
+
+    # toxic-flow filter: skip dips driven by one-sided (likely informed) flow
+    if max_toxicity is not None:
+        imb, vol = flow_imbalance(conn, token, entry_ts - lookback, entry_ts)
+        if imb is None or abs(imb) >= max_toxicity:
+            return None   # no/too-toxic flow -> don't provide liquidity here
 
     size = round(notional / entry, 2)
     broker = PaperBroker(cfg)
@@ -100,6 +108,9 @@ def main():
     ap.add_argument("--min-left", type=float, default=240.0, dest="min_left")
     ap.add_argument("--notional", type=float, default=10.0)
     ap.add_argument("--side", choices=["up", "down", "both"], default="both")
+    ap.add_argument("--max-toxicity", type=float, default=None, dest="max_toxicity",
+                    help="skip entries where |pre-entry flow imbalance| >= this (0..1)")
+    ap.add_argument("--lookback", type=float, default=60.0)
     args = ap.parse_args()
 
     cfg = SafetyConfig(max_order_usd=max(50.0, args.notional + 1))
@@ -116,7 +127,8 @@ def main():
         for side in sides:
             token = tok_up if side == "up" else tok_down
             r = run_side(conn, ws, side, token, outcome, args.entry, args.exit_p,
-                         args.min_left, args.notional, cfg)
+                         args.min_left, args.notional, cfg,
+                         max_toxicity=args.max_toxicity, lookback=args.lookback)
             if r is None:
                 continue
             opp += 1
