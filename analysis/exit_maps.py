@@ -27,6 +27,7 @@ from . import panel
 
 WINDOW = 300.0
 SELL_THRESHOLD = 0.01   # the price must clear entry by this much to count as a real exit
+EXEC_DELAY_SEC = 0.4    # signal->execution latency: ignore price action this soon after entry
 OUTDIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "exit_maps")
 
@@ -69,7 +70,10 @@ def entry_and_exit(path, cent, won):
     if idx is None:
         return None
     entry_x, entry_p = path[idx]
-    after = [mid for _, mid in path[idx + 1:]]
+    # only look for an exit AFTER the signal->execution latency (you can't react
+    # to price action in the first EXEC_DELAY_SEC after the entry signal fires)
+    delay_min = EXEC_DELAY_SEC / 60.0
+    after = [mid for x, mid in path[idx + 1:] if x >= entry_x + delay_min]
     best_after = max(after) if after else entry_p
     if best_after >= entry_p + SELL_THRESHOLD:
         return entry_x, best_after            # a real bounce you could sell into

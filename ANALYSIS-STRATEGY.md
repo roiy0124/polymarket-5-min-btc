@@ -53,27 +53,51 @@ The four things that define a trade: **time-left (T), BTC gap (S−K), the frequ
 | `combo_ev.py` | Combo EV sweep (USE WITH CARE — multiple-testing trap) | `python -m analysis.combo_ev` |
 | `flow.py` | Toxic vs panic flow conditional reversion | `python -m analysis.flow` |
 | `backtest.py` | Replay a rule via the real fill engine (+ `--max-toxicity`) | `python -m analysis.backtest` |
+| `exit_maps.py` | Per-entry-price exit-opportunity scatter maps (settlement-aware, 0.4s latency) | `python -m analysis.exit_maps` |
+| `data_quality.py` | Liveness / coverage / gaps / WS-freeze audit | `python -m analysis.data_quality` |
 | `panel.py` | Shared per-window feature/outcome table | (imported) |
 
 ## The exit-opportunity maps (the visual core)
 `exit_maps/up/entry_NNc.png` and `exit_maps/down/entry_NNc.png` (99 each).
+Generate: `python -m analysis.exit_maps` (read-only — no need to stop the collectors).
 - **x** = entry time in the 5-min round (the first moment that window's token hit
-  price `z`).
-- **y** = best sell price afterward in the SAME window (highest mid after entry) —
-  a mild UPPER BOUND (real sells hit the bid).
+  price bucket `z`).
+- **y** = realized **exit value**:
+  - the best price you could have **sold** at after entry (highest mid), **only if
+    it rose ≥ `SELL_THRESHOLD` (1¢) above entry** — a real sellable bounce; otherwise
+  - the **resolution value: 0 if that side lost (complete loss), 1 if it won**.
+  So a "couldn't sell" loss sits on the **floor at 0**, a held win at the **top (1.0)**,
+  and genuine bounces show their height. (Earlier versions left no-bounce dots at the
+  entry line, which hid the losses — fixed.)
+- **execution latency**: the exit search starts `EXEC_DELAY_SEC` (**0.4s**) after
+  entry, so you never "sell" into price action a real (latent) system couldn't react to.
+- **binning**: floor into uniform 1¢ buckets `[c, c+1)` — NOT `round()`, whose
+  banker's rounding left odd-cent charts artificially empty.
 - **color** = window outcome: green = resolved Up, red = resolved Down. (So on the
   DOWN chart, red dots are the Down-token winners → they rise to ~1.0.)
-- **lines**: dashed at y=z (sell breakeven), dotted at y=2z.
+- **lines**: dashed at y=z (entry), dotted at y=2z.
 
 **How to read them:**
-- Dots hugging the dashed line → no bounce; entries there have no exit edge.
+- A **floor of dots at 0** → complete losses (entered, never got a sellable bounce,
+  resolved against you). This is the honest downside.
 - Dots reaching well above z → a sellable bounce existed (margin = y − z).
-- **Right edge flat at z** → late entries (little time left) can't bounce — the
-  time-left wall, visible.
-- Green towering over red → an exit excursion foretells the winner; red dots that
-  still poke above z → you can sell a loser's bounce before it dies.
+- **Right edge dropping to 0** → late entries (little time left) can't bounce — the
+  time-left wall.
 - Find a **band** (price × entry-time) where dots reliably clear a target → that's
   a candidate rule to quantify in step 3.
+- Tunables at the top of `exit_maps.py`: `SELL_THRESHOLD` (min bounce to count as a
+  sellable exit) and `EXEC_DELAY_SEC` (signal→execution latency).
+
+## Per-round charts (ground-truth viewer) — `round_charts/`
+`chart_capture.py` (a supervised service; backfill with `python chart_capture.py --once`)
+draws one chart per resolved round from the DB: Up/Down token lines + the **BTC price
+and target/strike on a second axis** + Polymarket's official price dots (live rounds)
+as a ground-truth overlay. Lets you eyeball each round and confirm BTC crossing the
+target drives the odds.
+
+## The operator menu — `python menu.py`
+A numbered control menu wrapping everything (inspect, generate maps/charts, run the
+analyses, paper-trade, start/stop the collectors). The easiest way to drive the project.
 
 ## Rigor rules (non-negotiable)
 - **One observation per window** — windows are independent 5-min markets; pooling
