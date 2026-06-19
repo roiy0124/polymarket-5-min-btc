@@ -37,7 +37,8 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.d
 MARKET_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 BINANCE_WS = "wss://stream.binance.com:9443/ws/btcusdt@bookTicker"
 WINDOW_SECONDS = 300
-INACTIVITY_TIMEOUT = 120.0     # reconnect market WS after this many seconds of silence
+INACTIVITY_TIMEOUT = 30.0      # reconnect market WS after this many seconds of silence
+PROACTIVE_RECONNECT = 90.0     # also cycle the market WS this often to pre-empt freezes
 FLUSH_INTERVAL = 0.5           # how often buffered rows are committed to SQLite
 PING_INTERVAL = 15.0
 RECONNECT_BACKOFF = 2.0
@@ -71,7 +72,7 @@ class State:
         self.book_buf = []
         self.trade_buf = []
         self.btc_buf = []
-        self.stats = {"book": 0, "trade": 0, "btc": 0, "reconnects": 0}
+        self.stats = {"book": 0, "trade": 0, "btc": 0, "reconnects": 0, "proactive": 0}
 
 
 def _subscribe_msg(assets):
@@ -155,13 +156,18 @@ def _handle_market_event(state, ev, recv_ts, recv_utc):
 
 async def market_consumer(state):
     while state.running:
+        proactive = False
         try:
             async with websockets.connect(MARKET_WS, ping_interval=PING_INTERVAL,
                                            ping_timeout=10, max_size=None) as ws:
                 state.market_ws = ws
                 await _resubscribe(state)
-                last_msg = time.time()
+                conn_start = time.time()
+                last_msg = conn_start
                 while state.running:
+                    if time.time() - conn_start > PROACTIVE_RECONNECT:
+                        proactive = True
+                        break
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
                     except asyncio.TimeoutError:
@@ -185,8 +191,11 @@ async def market_consumer(state):
         finally:
             state.market_ws = None
         if state.running:
-            state.stats["reconnects"] += 1
-            await asyncio.sleep(RECONNECT_BACKOFF)
+            if proactive:
+                state.stats["proactive"] += 1   # planned cycle -> reconnect immediately
+            else:
+                state.stats["reconnects"] += 1
+                await asyncio.sleep(RECONNECT_BACKOFF)
 
 
 # ---- Binance bookTicker -----------------------------------------------------
@@ -243,7 +252,7 @@ async def flusher(state, conn):
             s = state.stats
             print(f"[{time.strftime('%H:%M:%S')}] events  book={s['book']}  "
                   f"trades={s['trade']}  btc_ticks={s['btc']}  "
-                  f"reconnects={s['reconnects']}", flush=True)
+                  f"reconnects={s['reconnects']} proactive={s['proactive']}", flush=True)
             last_report = time.time()
 
 
