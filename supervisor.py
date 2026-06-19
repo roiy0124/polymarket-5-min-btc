@@ -26,9 +26,10 @@ PY = sys.executable
 
 CHILDREN = [
     # -u = unbuffered stdout so logs flush promptly to the .out.log files
-    ("collector",    [PY, "-u", "collector.py"]),
-    ("ws_collector", [PY, "-u", "ws_collector.py"]),
-    ("viewer",       [PY, "-u", "viewer.py", "8765"]),
+    ("collector",     [PY, "-u", "collector.py"]),
+    ("ws_collector",  [PY, "-u", "ws_collector.py"]),
+    ("viewer",        [PY, "-u", "viewer.py", "8765"]),
+    ("chart_capture", [PY, "-u", "chart_capture.py"]),
 ]
 
 CHECK_INTERVAL = 3.0

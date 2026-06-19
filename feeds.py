@@ -142,6 +142,31 @@ def fetch_binance(timeout=DEFAULT_TIMEOUT):
     return float(data["price"])
 
 
+_BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+PRICES_HISTORY = "https://clob.polymarket.com/prices-history"
+
+
+def fetch_price_history(token_id, start_ts, end_ts, fidelity=1, timeout=DEFAULT_TIMEOUT):
+    """Polymarket's official price series for one outcome token over [start,end].
+    Public, but Cloudflare 403s non-browser User-Agents, so we send a browser UA.
+    Returns [(t_unix, price)]. NOTE: coarse (~1/min) and EMPTY once the market
+    resolves -> fetch while the round is still live."""
+    url = (f"{PRICES_HISTORY}?market={token_id}&startTs={int(start_ts)}"
+           f"&endTs={int(end_ts)}&fidelity={fidelity}")
+    req = urllib.request.Request(url, headers={"User-Agent": _BROWSER_UA,
+                                               "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    out = []
+    for pt in data.get("history", []):
+        try:
+            out.append((int(pt["t"]), float(pt["p"])))
+        except (KeyError, ValueError, TypeError):
+            pass
+    return out
+
+
 def fetch_pyth(timeout=DEFAULT_TIMEOUT):
     url = f"{PYTH_LATEST}?ids[]={PYTH_BTC_ID}&parsed=true&encoding=hex"
     data = _get_json(url, timeout=timeout)
