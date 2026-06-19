@@ -25,9 +25,10 @@ STOP_FILE = os.path.join(HERE, "STOP")
 PY = sys.executable
 
 CHILDREN = [
-    ("collector",    [PY, "collector.py"]),
-    ("ws_collector", [PY, "ws_collector.py"]),
-    ("viewer",       [PY, "viewer.py", "8765"]),
+    # -u = unbuffered stdout so logs flush promptly to the .out.log files
+    ("collector",    [PY, "-u", "collector.py"]),
+    ("ws_collector", [PY, "-u", "ws_collector.py"]),
+    ("viewer",       [PY, "-u", "viewer.py", "8765"]),
 ]
 
 CHECK_INTERVAL = 3.0
