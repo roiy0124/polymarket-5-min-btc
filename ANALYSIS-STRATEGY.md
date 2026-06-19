@@ -77,6 +77,13 @@ Generate: `python -m analysis.exit_maps` (read-only — no need to stop the coll
   DOWN chart, red dots are the Down-token winners → they rise to ~1.0.)
 - **lines**: dashed at y=z (entry), dotted at y=2z.
 
+**Best buy-window overlay** (added): each chart shades the contiguous **entry-time
+window (≥30s)** that buying at that price wins most *consistently*, with a line at
+the expected exit price and a left-side label `BUY t1-t2 min · win % · EV %`. The
+window is chosen by the **Wilson lower bound** of the win-rate (consistency we can
+trust — rewards a high rate AND enough samples), then ROI, then width. A "win" =
+exit value above the entry price. Tunables: `BUY_WIN_MIN_WIDTH`, `BUY_WIN_MIN_DOTS`.
+
 **How to read them:**
 - A **floor of dots at 0** → complete losses (entered, never got a sellable bounce,
   resolved against you). This is the honest downside.
