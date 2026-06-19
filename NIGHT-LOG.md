@@ -43,8 +43,11 @@ folder, or `Stop-Process` the supervisor. Cleaned up duplicate/orphan processes.
 4. **Data-analysis toolkit for reliable results** → `DATA-ANALYSIS-TOOLKIT.md`.
    (Track N trials; t>3 hurdle; Deflated Sharpe / PBO; TimeSeriesSplit+gap / CPCV;
    robust SEs; block bootstrap; calibration; honest end-to-end checklist.)
-5. **Polymarket order execution** → *still running at log time*; `EXECUTION.md`
-   "Live API recipe" + `LiveBroker` to be completed from it (task open).
+5. **Polymarket order execution** → **DONE** → `EXECUTION.md` + `LiveBroker`.
+   Verified recipe (py-clob-client GTC limit / FOK / cancel / user-channel fills).
+   ⚠️ **Critical gotcha**: only a plain **EOA (signature_type=0)** works — a
+   website/proxy (POLY_1271) wallet fails HTTP 400. Auto-sell must gate on
+   **CONFIRMED**. Allowances/fees still to verify before live.
 
 ## Reliability fixes
 - `collector.py`: per-tick DB writes + settlement wrapped in try/except — a
@@ -85,9 +88,11 @@ lives in (a) filtering *non-toxic* (panic) flow, and (b) measuring reversion
 *conditional on a fill*. Both are buildable on the data we now capture.
 
 ## What's still open
-- **Task 3**: finalize `LiveBroker` + `EXECUTION.md` "Live API recipe" once the
-  execution research lands (auth, allowances, GTC/FOK limit, cancel, real fees).
-  I will integrate it and update this log when it completes.
+- **All 5 night tasks are DONE.** The only remaining items are *your* pre-live
+  verifications (not codeable without your account): set USDC+CTF allowances,
+  confirm the real fee, and fund a **plain EOA** (not the website proxy wallet).
+- The live path is wired but **untested without keys** — paper-trade the exact
+  rule first, then enable `SafetyConfig(live=True)` with EOA creds.
 
 ## Recommended next steps (for you)
 1. Let it keep collecting — significance needs hundreds of windows (a day = 288).

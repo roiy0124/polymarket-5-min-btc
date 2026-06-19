@@ -62,9 +62,10 @@ newly-filled quantity at the exit price (so partial fills are hedged immediately
 
 ## Going live — checklist (DO NOT skip)
 
-> Status: **LIVE PATH NOT YET WIRED.** Pending the verified execution recipe from
-> the deep-research pass (task w4edctlys). The steps below are the known shape;
-> exact functions/params land in the "Live API recipe" section once confirmed.
+> Status: **LIVE PATH WIRED per the verified recipe (below), but UNTESTED without
+> real keys.** `LiveBroker` places/cancels via py-clob-client; it stays disabled
+> until you pass `SafetyConfig(live=True)` + EOA credentials. Do the allowance/fee
+> verification first.
 
 1. **Fund** a Polymarket account (USDC on Polygon).
 2. **One-time allowances**: approve USDC + CTF (ERC-1155) to the Exchange /
@@ -77,10 +78,81 @@ newly-filled quantity at the exit price (so partial fills are hedged immediately
    intended vs actual every loop; keep the `kill_switch` reachable.
 8. Watch the first live fills by hand before letting it run unattended.
 
-## Live API recipe (to be completed from research)
+## Live API recipe (verified — 24/25 claims 3-vote confirmed)
 
-*(This section will be filled with the exact `py-clob-client` calls — client
-setup, `create_or_derive_api_creds`, `OrderArgs` / `create_order` / `post_order`
-for GTC limit + marketable limit, `cancel*`, allowances, the real fee schedule,
-and rate limits — once the execution research is verified. Until then `LiveBroker`
-deliberately refuses to operate.)*
+> `LiveBroker` (exec_engine/broker.py) implements this. It still refuses to run
+> unless `SafetyConfig(live=True)` + credentials, and enforces `signature_type=0`.
+> **UNTESTED without real keys — paper-trade first.**
+
+### ⚠️ The single biggest gotcha
+**Website / email-funded accounts use a proxy wallet = `signature_type=3`
+(POLY_1271).** The SDK binds the API key to your EOA, so POLY_1271 orders fail
+**HTTP 400 "order signer address has to be the address of the API KEY"** (open
+issues #70/#64/#71/#75/#77). **Only a plain EOA (`signature_type=0`, `funder`=that
+EOA's address) is verified to work.** ⇒ Fund a dedicated EOA directly, don't trade
+from the website proxy wallet via the SDK.
+
+### Auth
+```python
+from py_clob_client.client import ClobClient
+client = ClobClient("https://clob.polymarket.com", key=PRIVATE_KEY,
+                    chain_id=137, signature_type=0, funder=EOA_ADDRESS)
+client.set_api_creds(client.create_or_derive_api_creds())   # L2 apiKey/secret/passphrase
+```
+L1 = EIP-712 private-key (signs creds + orders); L2 = HMAC on api creds.
+(The manual REST `/auth/api-key` + `POLY_NONCE` path was **refuted** — use
+`create_or_derive_api_creds()`.)
+
+### Place orders
+```python
+from py_clob_client.clob_types import OrderArgs, OrderType, PartialCreateOrderOptions
+from py_clob_client.order_builder.constants import BUY, SELL
+args = OrderArgs(token_id=TOKEN, price=0.22, size=45, side=BUY)
+signed = client.create_order(args, PartialCreateOrderOptions(neg_risk=False))
+resp = client.post_order(signed, OrderType.GTC)   # resp['orderID']
+```
+- **Resting limit BUY → `OrderType.GTC`**; **instant/marketable exit → `FOK`/`FAK`**
+  (cross the spread). `GTD` = with expiration.
+- Round price to the market tick (0.01 here). Min order **$5**.
+- **Precision is side/tick-specific** — excess decimals are rejected (FOK stricter
+  than GTC). Stick to the tick grid and integer-ish sizes.
+- neg-risk markets need `PartialCreateOrderOptions(neg_risk=True)` (our BTC up/down
+  markets are `negRisk=false`).
+
+### Cancel + reconcile
+```python
+client.cancel(order_id)            # -> {"canceled":[...], "not_canceled":{...}}
+client.cancel_orders([...]) / client.cancel_all() / client.cancel_market_orders()
+client.get_orders(OpenOrderParams())   # reconcile intended vs actual
+client.get_trades()
+```
+All cancels need L2 auth. Confirm the id appears in `canceled`.
+
+### Fill listener + auto-sell timing
+User channel `wss://ws-subscriptions-clob.polymarket.com/ws/user`,
+`{"auth":{apiKey,secret,passphrase}, "type":"user", "markets":[CONDITION_IDS]}`.
+- `trade` events carry `matched_amount`; `order` events carry `size_matched` and a
+  `type` of PLACEMENT / UPDATE / CANCELLATION.
+- Lifecycle **MATCHED → MINED → CONFIRMED** (branch RETRYING / FAILED); only
+  **CONFIRMED** and **FAILED** are terminal.
+- **Gate the auto-SELL on `CONFIRMED`**, not MATCHED — a MATCHED trade can still
+  FAIL, and selling against a fill that later fails leaves you short.
+  (`exec_engine/user_stream.py` parses these; for live, wire its `on_fill` →
+  filter `status=="CONFIRMED"` → `OrderManager` places the exit.)
+
+### Still verify before going live (NOT covered by surviving claims)
+- **Allowances**: one-time USDC + CTF (ERC-1155) approvals to the Exchange /
+  neg-risk contracts. **Orders silently fail without them.** Set + check first.
+- **Fees**: confirm the real maker/taker fee on these markets (Gamma shows
+  `makerBaseFee`/`takerBaseFee=1000`, `rewardsMinSize`/`rewardsMaxSpread`) — the
+  unit/effective rate matters a lot to an ~11¢ margin.
+- **Rate limits, nonce, server clock-sync, idempotency** — confirm before unattended.
+
+### SDK note
+`py-clob-client` is archived (still works for the EOA path). Successor is
+`py-sdk` (PyPI `polymarket-client` 0.1.0b8) but its README lacks mechanics —
+stay on `py-clob-client` until the new SDK documents these calls.
+
+Sources: github.com/Polymarket/py-clob-client · docs.polymarket.com (CLOB
+auth / orders / cancel / user-channel) · py-clob-client issues #121/#70/#147 ·
+nautilustrader Polymarket integration.

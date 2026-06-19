@@ -144,30 +144,108 @@ class PaperBroker(Broker):
 
 
 class LiveBroker(Broker):
-    """Real Polymarket CLOB broker. Intentionally a STUB until the execution
-    research lands. It will NOT operate unless config.live is True and
-    credentials are supplied, and even then the concrete order calls are filled
-    in only after the API recipe is verified (see EXECUTION.md / task #3)."""
+    """Real Polymarket CLOB broker, wired per the verified execution recipe
+    (see EXECUTION.md). Places GTC resting limits / FOK marketable orders and
+    cancels them via py-clob-client.
+
+    SAFETY: refuses to operate unless SafetyConfig(live=True) AND credentials are
+    supplied. Only a plain EOA (signature_type=0, funder=EOA) is verified to work
+    end-to-end — website/proxy (POLY_1271) accounts fail with HTTP 400, so this
+    enforces signature_type=0 by default. UNTESTED without real keys: paper-trade
+    first, ensure USDC+CTF allowances are set, and watch the first live fills by
+    hand. Fill detection / auto-sell is driven by user_stream gated on CONFIRMED.
+
+    credentials = {
+        "private_key": "0x...",        # the EOA private key (L1 signer)
+        "funder": "0x...",             # usually the SAME EOA address
+        "signature_type": 0,            # EOA; do NOT use 3 (POLY_1271) — broken w/ SDK
+        "host": "https://clob.polymarket.com",   # optional
+        "api_creds": {...},             # optional; derived if omitted
+        "neg_risk": False,              # set True only for neg-risk markets
+    }
+    """
+
+    HOST = "https://clob.polymarket.com"
+    CHAIN_ID = 137
 
     def __init__(self, config, credentials=None):
         super().__init__(config)
         if not config.live:
             raise RuntimeError(
-                "LiveBroker requires SafetyConfig(live=True). Refusing to run in a "
-                "config that isn't explicitly live. Use PaperBroker for simulation.")
-        if not credentials:
-            raise RuntimeError("LiveBroker requires credentials (private key + API creds).")
+                "LiveBroker requires SafetyConfig(live=True). Use PaperBroker for simulation.")
+        if not credentials or not credentials.get("private_key"):
+            raise RuntimeError("LiveBroker requires credentials with a 'private_key'.")
+        sigtype = credentials.get("signature_type", 0)
+        if sigtype != 0:
+            raise RuntimeError(
+                f"signature_type={sigtype} is not supported. Only a plain EOA "
+                f"(signature_type=0, funder=EOA) is verified; website/proxy "
+                f"(POLY_1271=3) accounts fail HTTP 400 with the SDK. Fund a plain EOA.")
         self.credentials = credentials
-        # py-clob-client is imported lazily so the package works without it.
+        self.neg_risk = bool(credentials.get("neg_risk", False))
         self._client = None
+        self._order_ids: dict[str, str] = {}   # client_id -> broker order id
+        print("[LiveBroker] LIVE mode armed. Real orders will be placed. "
+              "Ensure USDC+CTF allowances are set and start tiny.", flush=True)
 
     def _ensure_client(self):
-        raise NotImplementedError(
-            "LiveBroker is not wired yet — pending verified Polymarket execution "
-            "recipe (research task w4edctlys). See EXECUTION.md.")
+        if self._client is not None:
+            return self._client
+        try:
+            from py_clob_client.client import ClobClient
+        except ImportError as e:
+            raise RuntimeError("pip install py-clob-client (see requirements-exec.txt)") from e
+        c = self.credentials
+        client = ClobClient(c.get("host", self.HOST), key=c["private_key"],
+                            chain_id=self.CHAIN_ID, signature_type=0,
+                            funder=c.get("funder"))
+        creds = c.get("api_creds") or client.create_or_derive_api_creds()
+        client.set_api_creds(creds)
+        self._client = client
+        return client
+
+    def _round_tick(self, price: float) -> float:
+        return round(round(price / self.config.tick) * self.config.tick, 4)
 
     def place(self, intent: OrderIntent, **kw) -> Order:
-        self._ensure_client()
+        ok, reason = self.config.validate(intent)
+        order = Order(intent=intent)
+        if not ok:
+            order.status = OrderStatus.REJECTED
+            order.note = reason
+            self.orders[intent.client_id] = order
+            return order
+        client = self._ensure_client()
+        from py_clob_client.clob_types import OrderArgs, OrderType, PartialCreateOrderOptions
+        from py_clob_client.order_builder.constants import BUY, SELL
+        args = OrderArgs(token_id=intent.token_id, price=self._round_tick(intent.price),
+                         size=intent.size, side=(BUY if intent.side == Side.BUY else SELL))
+        otype = {"GTC": OrderType.GTC, "FOK": OrderType.FOK,
+                 "FAK": OrderType.FAK, "GTD": OrderType.GTD}.get(intent.tif, OrderType.GTC)
+        options = PartialCreateOrderOptions(neg_risk=self.neg_risk)
+        signed = client.create_order(args, options)
+        resp = client.post_order(signed, otype)
+        oid = (resp or {}).get("orderID") or (resp or {}).get("orderId")
+        if not oid or (resp or {}).get("success") is False:
+            order.status = OrderStatus.REJECTED
+            order.note = str(resp)
+        else:
+            order.status = OrderStatus.OPEN
+            order.broker_order_id = oid
+            self._order_ids[intent.client_id] = oid
+        self.orders[intent.client_id] = order
+        self._emit_status(order)
+        return order
 
     def cancel(self, client_id: str) -> bool:
-        self._ensure_client()
+        oid = self._order_ids.get(client_id)
+        if not oid:
+            return False
+        client = self._ensure_client()
+        resp = client.cancel(oid) or {}
+        ok = oid in (resp.get("canceled") or [])
+        order = self.orders.get(client_id)
+        if ok and order and not order.is_terminal:
+            order.status = OrderStatus.CANCELED
+            self._emit_status(order)
+        return ok
