@@ -54,7 +54,9 @@ def entry_and_best(path, cent):
     Returns (entry_elapsed_min, best_mid) or None."""
     idx = None
     for i, (_, mid) in enumerate(path):
-        if round(mid * 100) == cent:
+        # floor into a uniform 1c bucket [cent, cent+1) -- NOT round(), whose
+        # banker's rounding (.5 -> even) leaves odd-cent charts artificially empty.
+        if int(mid * 100 + 1e-6) == cent:
             idx = i
             break
     if idx is None:
