@@ -43,6 +43,14 @@ charts, run the analyses, paper-trade, and start/stop the collectors. (Use Pytho
 Python 3.9 will NOT run the 3.10+ syntax.) Don't run TWO supervisors at once — the
 menu's "Start" checks first to avoid duplicates.
 
+Two notable menu features:
+- **Create NEW database** — archives the current `btc_updown.db` into `old_dbs/`
+  (timestamped) and starts a fresh empty one; the collectors restart automatically.
+- **Analysis scope** — every analysis first asks `[1] current fresh DB` or
+  `[2] last X days`. Option 2 merges the current DB **and** every archive in
+  `old_dbs/` over the chosen window (env `BTC_ANALYSIS_DAYS`), so you can analyse
+  across database resets. (Price analyses only — the WS stream tables aren't merged.)
+
 ### Or drive it directly
 
 **Use the supervisor — it is the single entry point and keeps everything alive

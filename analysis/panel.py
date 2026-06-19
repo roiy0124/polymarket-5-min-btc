@@ -6,14 +6,78 @@ This is the table the calibration study consumes.
 """
 
 import os
+import time
+import glob
 import sqlite3
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "btc_updown.db")
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(HERE, "btc_updown.db")
+OLD_DBS_DIR = os.path.join(HERE, "old_dbs")
 
 
-def connect(path=DB_PATH):
-    return sqlite3.connect(path, timeout=10)
+def _source_dbs():
+    """Current DB + any archived DBs in old_dbs/."""
+    dbs = [DB_PATH] if os.path.exists(DB_PATH) else []
+    dbs += sorted(glob.glob(os.path.join(OLD_DBS_DIR, "*.db")))
+    return dbs
+
+
+def _merged_connection(days):
+    """In-memory DB of windows+snapshots from the last `days` days, merged across
+    the current DB and every archive in old_dbs/. Stream tables (book_events/trades/
+    btc_ticks) are created empty (too big to merge; only price analyses use this)."""
+    cutoff = time.time() - float(days) * 86400.0
+    sources = _source_dbs()
+    mem = sqlite3.connect(":memory:")
+    if not sources:
+        return mem
+    src0 = sqlite3.connect(sources[0])
+    creates = src0.execute("SELECT sql FROM sqlite_master WHERE type='table' "
+                           "AND sql NOT NULL").fetchall()
+    src0.close()
+    for (sql,) in creates:
+        try:
+            mem.execute(sql)
+        except sqlite3.Error:
+            pass
+    mem.execute("CREATE INDEX IF NOT EXISTS ix_m_snap ON snapshots(window_start)")
+    # snapshot columns minus autoincrement id (ids collide across DBs)
+    snap_cols = ",".join(r[1] for r in mem.execute("PRAGMA table_info(snapshots)")
+                         if r[1] != "id")
+    n_db = 0
+    for src in sources:
+        try:
+            mem.execute("ATTACH DATABASE ? AS s", (src,))
+            mem.execute("INSERT OR IGNORE INTO windows SELECT * FROM s.windows "
+                        "WHERE window_start >= ?", (cutoff,))
+            mem.execute(f"INSERT INTO snapshots ({snap_cols}) SELECT {snap_cols} "
+                        f"FROM s.snapshots WHERE window_start >= ?", (cutoff,))
+            mem.commit()                       # end txn so DETACH is allowed
+            mem.execute("DETACH DATABASE s")
+            n_db += 1
+        except sqlite3.Error:
+            try:
+                mem.commit()
+                mem.execute("DETACH DATABASE s")
+            except sqlite3.Error:
+                pass
+    mem.commit()
+    nwin = mem.execute("SELECT COUNT(*) FROM windows").fetchone()[0]
+    print(f"[scope] last {days} days across {n_db} db(s) -> {nwin} windows", flush=True)
+    return mem
+
+
+def connect(path=None):
+    """Open the data. Honors env BTC_ANALYSIS_DAYS: if set, return a merged
+    last-N-days connection across current + old_dbs/; else the current DB."""
+    if path is None:
+        days = os.environ.get("BTC_ANALYSIS_DAYS")
+        if days:
+            try:
+                return _merged_connection(days)
+            except Exception as e:
+                print(f"[scope] merge failed ({e!r}); using current DB", flush=True)
+    return sqlite3.connect(path or DB_PATH, timeout=10)
 
 
 def build_panel(conn, horizon_s=240.0):
