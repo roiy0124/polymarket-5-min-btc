@@ -18,7 +18,7 @@ y is the best MID (a mild upper bound; real sells hit the bid). Exploratory only
 """
 
 import os
-import math
+import bisect
 
 import matplotlib
 matplotlib.use("Agg")
@@ -30,7 +30,7 @@ WINDOW = 300.0
 SELL_THRESHOLD = 0.01   # the price must clear entry by this much to count as a real exit
 EXEC_DELAY_SEC = 0.4    # signal->execution latency: ignore price action this soon after entry
 BUY_WIN_MIN_WIDTH = 0.5   # minutes; the best buy-time window must be >= this (30s)
-BUY_WIN_MIN_DOTS = 5      # require this many entries in a window to trust it
+BUY_WIN_MIN_DOTS = 8      # require this many entries in a window to trust it
 BUY_WIN_STEP = 0.25       # minutes; grid for scanning window boundaries
 OUTDIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "exit_maps")
@@ -84,23 +84,13 @@ def entry_and_exit(path, cent, won):
     return entry_x, (1.0 if won else 0.0)     # no exit -> resolution (0 = loss)
 
 
-def _wilson_lb(k, n, z=1.96):
-    """95% Wilson lower bound on a win-rate k/n -- high only when the rate is high
-    AND well-sampled, so a 3-of-3 fluke scores below a 40-of-45."""
-    if n == 0:
-        return 0.0
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
-    return max(0.0, c - h)
-
-
-def best_buy_window(dots, z):
-    """Best contiguous entry-time window (>= BUY_WIN_MIN_WIDTH wide) to buy at z.
-    A 'win' = exit value above the entry price z. Chosen for winning CONSISTENCY
-    first (Wilson lower bound on win-rate), then ROI, then width.
-    Returns (t1, t2, mean_exit, win_rate, lb, roi, n) or None."""
+def best_sell_window(dots, z):
+    """Best (entry-time window >= BUY_WIN_MIN_WIDTH, single SELL price T) for buying
+    at price z. A dot AT/ABOVE T is a WIN (the price reached your limit sell -> you
+    sold at T); a dot UNDER T is a loss (never reached it). Chosen to maximize the
+    SWEET SPOT  win_rate x ROI  -- balancing how OFTEN you reach the sell (win rate)
+    against how MUCH you make (ROI = (T - z)/z). Returns
+    (t1, t2, sell_T, win_rate, roi, ev, n) or None, where ev = win_rate * roi."""
     if len(dots) < BUY_WIN_MIN_DOTS:
         return None
     grid = [round(i * BUY_WIN_STEP, 2) for i in range(int(5 / BUY_WIN_STEP) + 1)]
@@ -110,22 +100,24 @@ def best_buy_window(dots, z):
             t1, t2 = grid[a], grid[b]
             if t2 - t1 < BUY_WIN_MIN_WIDTH - 1e-9:
                 continue
-            inside = [d for d in dots if t1 <= d[0] <= t2]
-            n = len(inside)
+            ys = sorted(d[1] for d in dots if t1 <= d[0] <= t2)
+            n = len(ys)
             if n < BUY_WIN_MIN_DOTS:
                 continue
-            wins = sum(1 for d in inside if d[1] > z + 1e-9)
-            wr = wins / n
-            lb = _wilson_lb(wins, n)
-            mean_exit = sum(d[1] for d in inside) / n
-            roi = (mean_exit - z) / z if z > 0 else 0.0
-            key = (round(lb, 4), round(roi, 4), t2 - t1)
-            if best is None or key > best[0]:
-                best = (key, t1, t2, mean_exit, wr, lb, roi, n)
+            for T in sorted(set(ys)):
+                if T <= z + 1e-9:
+                    continue
+                reach = n - bisect.bisect_left(ys, T - 1e-9)   # dots with y >= T
+                win_rate = reach / n
+                roi = (T - z) / z
+                ev = win_rate * roi
+                key = (round(ev, 6), win_rate, t2 - t1)
+                if best is None or key > best[0]:
+                    best = (key, t1, t2, T, win_rate, roi, ev, n)
     if best is None:
         return None
-    _, t1, t2, mean_exit, wr, lb, roi, n = best
-    return t1, t2, mean_exit, wr, lb, roi, n
+    _, t1, t2, T, win_rate, roi, ev, n = best
+    return t1, t2, T, win_rate, roi, ev, n
 
 
 def make_plot(side, cent, dots, outpath):
@@ -149,23 +141,28 @@ def make_plot(side, cent, dots, outpath):
     ax.set_ylabel("exit value (sell bounce, else 1=win / 0=loss at resolution)")
     ax.set_title(f"{side.upper()} token  |  entry @ {cent}c  |  n={len(dots)}")
 
-    # best buy-time window (consistency first): shade it, draw a line at the
-    # expected exit price, and print the expected ROI on the left.
-    bw = best_buy_window(dots, z)
+    # best (buy-window, sell price) sweet spot (max win_rate x ROI): shade the
+    # window, draw the SELL line (dots above = win, below = loss), label it, and
+    # print the sell price in the right margin (outside the plot).
+    bw = best_sell_window(dots, z)
     if bw:
-        t1, t2, mean_exit, wr, lb, roi, n = bw
+        t1, t2, sell_T, wr, roi, ev, n = bw
         ax.axvspan(t1, t2, color="#3fb950", alpha=0.08, zorder=0)
-        ax.plot([t1, t2], [mean_exit, mean_exit], color="#8957e5", lw=2.6, zorder=4,
-                solid_capstyle="butt", label="best buy-window")
+        ax.plot([t1, t2], [sell_T, sell_T], color="#8957e5", lw=2.6, zorder=4,
+                solid_capstyle="butt", label="sell target")
+        ax.text(1.015, sell_T, f"sell\n{sell_T:.2f}", transform=ax.get_yaxis_transform(),
+                fontsize=7.5, color="#5a32a3", weight="bold", va="center", ha="left",
+                clip_on=False)
         ax.text(0.02, 0.035,
-                f"BUY {t1:.2g}-{t2:.2g} min   win {wr:.0%}   EV {roi:+.0%}   n={n}",
-                transform=ax.transAxes, fontsize=8, color="#5a32a3", weight="bold",
+                f"BUY {t1:.2g}-{t2:.2g}min  sell {sell_T:.2f}  win {wr:.0%}  "
+                f"ROI {roi:+.0%}  (EV {ev:+.0%}, n={n})",
+                transform=ax.transAxes, fontsize=7.5, color="#5a32a3", weight="bold",
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#8957e5", alpha=0.92))
 
     ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
     ax.grid(True, alpha=0.15)
     fig.tight_layout()
-    fig.savefig(outpath)
+    fig.savefig(outpath, bbox_inches="tight")
     plt.close(fig)
 
 

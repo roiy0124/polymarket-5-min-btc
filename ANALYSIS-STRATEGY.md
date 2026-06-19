@@ -77,12 +77,19 @@ Generate: `python -m analysis.exit_maps` (read-only — no need to stop the coll
   DOWN chart, red dots are the Down-token winners → they rise to ~1.0.)
 - **lines**: dashed at y=z (entry), dotted at y=2z.
 
-**Best buy-window overlay** (added): each chart shades the contiguous **entry-time
-window (≥30s)** that buying at that price wins most *consistently*, with a line at
-the expected exit price and a left-side label `BUY t1-t2 min · win % · EV %`. The
-window is chosen by the **Wilson lower bound** of the win-rate (consistency we can
-trust — rewards a high rate AND enough samples), then ROI, then width. A "win" =
-exit value above the entry price. Tunables: `BUY_WIN_MIN_WIDTH`, `BUY_WIN_MIN_DOTS`.
+**Best buy-window + sell-target overlay** (added): each chart finds the
+**sweet spot** — the contiguous **entry-time window (≥30s)** *and* the single
+**limit-sell price `T`** that together maximize **win-rate × ROI**. It shades the
+window, draws a horizontal **sell line at `T`** (dots **at/above** it = wins, you
+sold at `T`; dots **under** it = losses, never reached your sell), prints the
+**sell price in the right margin** (outside the plot), and labels the left with
+`BUY t1-t2min · sell T · win% · ROI% · (EV%)`, where:
+- **win-rate** = fraction of that window's entries whose price reached `T`,
+- **ROI** = `(T − z)/z` (your gain when it fills),
+- **EV** = `win-rate × ROI` (the quantity maximized — the win-rate/ROI sweet spot).
+
+Tunables at the top of `exit_maps.py`: `BUY_WIN_MIN_WIDTH` (min 30s), `BUY_WIN_MIN_DOTS`
+(sample floor to avoid small-n flukes). Raise the latter for more robust windows.
 
 **How to read them:**
 - A **floor of dots at 0** → complete losses (entered, never got a sellable bounce,
