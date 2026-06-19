@@ -55,33 +55,55 @@ def render(conn, ws, official_up=None):
         return False
     strike, final, our, official_outcome = row
     snaps = conn.execute(
-        "SELECT time_left, up_mid, down_mid FROM snapshots WHERE window_start=? "
-        "AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
+        "SELECT time_left, up_mid, down_mid, btc_binance FROM snapshots "
+        "WHERE window_start=? AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
     if len(snaps) < 3:
         return False
-    xs = [(WINDOW - tl) / 60.0 for tl, _, _ in snaps]
-    up = [u for _, u, _ in snaps]
-    dn = [d if d is not None else None for _, _, d in snaps]
+    xs = [(WINDOW - tl) / 60.0 for tl, _, _, _ in snaps]
+    up = [u for _, u, _, _ in snaps]
+    dn = [d for _, _, d, _ in snaps]
+    btc = [b for _, _, _, b in snaps]
 
-    fig, ax = plt.subplots(figsize=(7.2, 4.2), dpi=90)
+    fig, ax = plt.subplots(figsize=(7.6, 4.4), dpi=90)
+    # --- left axis: token prices (0..1) ---
     ax.plot(xs, up, color="#3fb950", lw=1.4, label="Up  (our 1/sec data)")
     if any(d is not None for d in dn):
-        ax.plot(xs, dn, color="#e5534b", lw=1.0, alpha=0.45, label="Down")
+        ax.plot(xs, dn, color="#e5534b", lw=1.0, alpha=0.4, label="Down")
     if official_up:
         ox = [(t - ws) / 60.0 for t, _ in official_up]
         oy = [p for _, p in official_up]
-        ax.scatter(ox, oy, c="black", s=34, zorder=5, marker="o",
+        ax.scatter(ox, oy, c="black", s=34, zorder=6, marker="o",
                    label="Polymarket official (Up)")
     ax.axhline(0.5, ls=":", color="#888", lw=0.8)
     ax.set_xlim(0, 5)
     ax.set_ylim(0, 1)
     ax.set_xlabel("minutes into the 5-minute round")
-    ax.set_ylabel("price (implied probability)")
+    ax.set_ylabel("token price (implied probability)")
+
+    # --- right axis: BTC price + target (strike) ---
+    ax2 = ax.twinx()
+    bx = [x for x, b in zip(xs, btc) if b is not None]
+    by = [b for b in btc if b is not None]
+    if by:
+        ax2.plot(bx, by, color="#f0883e", lw=1.3, label="BTC price", zorder=4)
+        anchors = list(by) + ([strike] if strike else [])
+        lo, hi = min(anchors), max(anchors)
+        pad = max((hi - lo) * 0.35, 3.0)
+        ax2.set_ylim(lo - pad, hi + pad)
+        if strike:
+            ax2.axhline(strike, ls="--", color="#d4a017", lw=1.2,
+                        label=f"target / strike  {strike:.0f}")
+        ax2.set_ylabel("BTC price (USD)", color="#f0883e")
+        ax2.tick_params(axis="y", labelcolor="#f0883e")
+        ax2.ticklabel_format(axis="y", style="plain", useOffset=False)
+
     outc = official_outcome or our or "pending"
     t = datetime.fromtimestamp(ws, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
     sub = f"  |  BTC {strike:.0f} -> {final:.0f}" if (strike and final) else ""
     ax.set_title(f"{t} UTC   resolved: {outc}{sub}")
-    ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, loc="upper left", fontsize=7.5, framealpha=0.9)
     ax.grid(alpha=0.15)
     fig.tight_layout()
     fig.savefig(os.path.join(OUTDIR, f"{ws}_{utc_stamp(ws)}.png"))
