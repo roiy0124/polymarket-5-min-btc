@@ -33,6 +33,18 @@ This runs forever with no manual step.
 
 ## Run
 
+**Easiest: the operator menu.**
+```sh
+python menu.py
+```
+A numbered menu to do everything — inspect data, generate the exit maps and round
+charts, run the analyses, paper-trade, and start/stop the collectors. (Use Python
+3.10+ — the installed `AppData\Local\Python` 3.14 is correct; a Visual Studio
+Python 3.9 will NOT run the 3.10+ syntax.) Don't run TWO supervisors at once — the
+menu's "Start" checks first to avoid duplicates.
+
+### Or drive it directly
+
 **Use the supervisor — it is the single entry point and keeps everything alive
 until you stop it.** Do NOT run `collector.py` by hand in a terminal: a foreground
 process dies when the terminal closes (that looks like "it auto-stops"). The
