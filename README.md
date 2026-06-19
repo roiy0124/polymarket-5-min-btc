@@ -33,17 +33,30 @@ This runs forever with no manual step.
 
 ## Run
 
-Two collectors run together (hybrid: WebSocket primary + REST fallback):
+**Use the supervisor — it is the single entry point and keeps everything alive
+until you stop it.** Do NOT run `collector.py` by hand in a terminal: a foreground
+process dies when the terminal closes (that looks like "it auto-stops"). The
+supervisor runs detached, restarts any child that exits, and survives terminal
+closes.
 
 ```sh
 pip install -r requirements.txt   # websockets (needed by ws_collector only)
 
-python collector.py        # REST fallback + per-window strike/final/resolution
-python ws_collector.py     # real-time WebSocket: every book event + trade + BTC tick
-python peek.py             # summary (incl. ws stream counts)
-python peek.py windows     # one row per 5-min market (strike / final / resolution)
-python viewer.py           # live dashboard at http://127.0.0.1:8765 (auto-refresh)
+python supervisor.py       # starts + supervises collector + ws_collector + viewer
 ```
+Stop everything: create an empty file named `STOP` in this folder, or Stop-Process
+the supervisor PID. To launch detached on Windows so it survives the terminal:
+`Start-Process python -ArgumentList "supervisor.py" -WindowStyle Hidden`.
+
+Watch / inspect (read-only, run anytime):
+```sh
+python peek.py             # CLI summary (incl. ws stream counts)
+python peek.py windows     # one row per 5-min market (strike / final / resolution)
+# live dashboard: open http://127.0.0.1:8765 in a browser
+```
+
+The individual processes (`collector.py`, `ws_collector.py`, `viewer.py`) can be
+run standalone for debugging, but for normal use let the supervisor own them.
 
 `collector.py` and `peek.py` are pure standard library; `ws_collector.py` needs
 `websockets`. The WS feed is high-volume (~tens of GB/day in an active market) —

@@ -98,22 +98,26 @@ def main():
           f"(Ctrl-C or create STOP file to stop)", flush=True)
 
     while _running:
-        if os.path.exists(STOP_FILE):
-            print(f"[{_ts()}] STOP file found -> shutting down", flush=True)
-            break
-        now = time.time()
-        for ch in children:
-            if ch.alive():
-                if now - ch.started_at > HEALTHY_AFTER:
-                    ch.backoff = BACKOFF_START
-            elif now >= ch.next_start:
-                code = ch.proc.returncode if ch.proc else "?"
-                ch.restarts += 1
-                print(f"[{_ts()}] {ch.name} exited (code={code}); "
-                      f"restart #{ch.restarts}, next backoff {ch.backoff:.0f}s", flush=True)
-                ch.start()
-                ch.next_start = time.time() + ch.backoff
-                ch.backoff = min(BACKOFF_MAX, ch.backoff * 2)
+        try:
+            if os.path.exists(STOP_FILE):
+                print(f"[{_ts()}] STOP file found -> shutting down", flush=True)
+                break
+            now = time.time()
+            for ch in children:
+                if ch.alive():
+                    if now - ch.started_at > HEALTHY_AFTER:
+                        ch.backoff = BACKOFF_START
+                elif now >= ch.next_start:
+                    code = ch.proc.returncode if ch.proc else "?"
+                    ch.restarts += 1
+                    print(f"[{_ts()}] {ch.name} exited (code={code}); "
+                          f"restart #{ch.restarts}, next backoff {ch.backoff:.0f}s", flush=True)
+                    ch.start()
+                    ch.next_start = time.time() + ch.backoff
+                    ch.backoff = min(BACKOFF_MAX, ch.backoff * 2)
+        except Exception as e:
+            # the supervisor must never die on a stray error
+            print(f"[{_ts()}] supervisor loop error (continuing): {e!r}", flush=True)
         time.sleep(CHECK_INTERVAL)
 
     # graceful shutdown of the whole tree
