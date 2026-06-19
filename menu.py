@@ -122,8 +122,9 @@ def a_signals():
     roi = ask("min ROI (e.g. 0.50)", 0.50)
     usd = ask("bet USD per trade", 2)
     entry = ask("min entry price", 0.10)
+    ev = ask("min EV per $1 (0 = must be profitable)", 0.0)
     run([PY, "-m", "analysis.signals", "--min-win", win, "--min-roi", roi,
-         "--usd", usd, "--min-entry", entry], env_extra=scope)
+         "--usd", usd, "--min-entry", entry, "--min-ev", ev], env_extra=scope)
 
 
 def a_paper():

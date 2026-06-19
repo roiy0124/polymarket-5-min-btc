@@ -6,10 +6,18 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min
   win-rate AND min ROI) in ALL THREE lookbacks (**6h / 12h / 24h**). Salvages a line
-  by shrinking the buy-window (≥30s) and/or lowering the sell price `T`; ranks by
-  the sweet spot (worst-case-win × ROI). `--min-entry` drops illiquid penny tokens.
-  Sizes `shares = X_usd / z`. Outputs a ranked table + `signals.json`. Read-only;
-  manual validation gates Phase 2 (the executor — not built yet).
+  by shrinking the buy-window (≥30s) and/or lowering the sell price `T`. `--min-entry`
+  drops illiquid penny tokens. Sizes `shares = X_usd / z`. Outputs a ranked table +
+  `signals.json`. Read-only; manual validation gates Phase 2 (the executor — not built).
+- **Ranks by true expected value**, not just upside: `EV = win·ROI − (1−win)` (a miss
+  loses the whole stake, since a dot under the sell line settles toward 0), using the
+  worst-case win-rate across lookbacks. This rewards **consistency** — a 60%/+30% line
+  is EV −0.22 (a money-loser) and is dropped. `--min-ev` floor (default 0 = must be
+  profitable). The selection now also optimizes EV, so it prefers a slightly lower
+  sell with a higher, steadier win-rate over a high-ROI/low-win line.
+- **Input ergonomics**: runs interactively (`python -m analysis.signals`) — prompts
+  for win/ROI/USD if not passed. Win-rate accepts `0.67` or `67` (anything >1 read as
+  a percent, fixing the `67 → 6700%` footgun).
 
 ## Operator & data management
 - **`menu.py`** — interactive operator menu wrapping everything (inspect, generate
