@@ -34,6 +34,7 @@ LEDGER = os.path.join(HERE, "paper_trades.csv")
 OUTDIR = os.path.join(HERE, "round_reviews")
 WINDOW = 300.0
 SIDE_COLOR = {"up": "#1f77b4", "down": "#8c564b"}
+SIDE_MARKER = {"up": "o", "down": "s"}      # circle = up order, square = down order
 
 
 def _f(x, default=0.0):
@@ -115,13 +116,21 @@ def review_window(conn, ws, legs, include_unfilled):
         ax.annotate(f"{T:.2f}", (xmax, T), textcoords="offset points", xytext=(-2, 1),
                     ha="right", va="bottom", fontsize=7, color="purple")
 
+    # token price lines: always show BOTH up and down so the two sides are distinct
+    paths = {}
+    for side in ("up", "down"):
+        p = path_for(conn, ws, side)
+        paths[side] = p
+        if p:
+            ax.plot([x for x, _ in p], [m for _, m in p],
+                    color=SIDE_COLOR.get(side, "gray"), lw=1.3, zorder=2)
+
+    # order markers, shaped by side (circle = up order, square = down order)
     pnl_total = 0.0
     reached = entered = 0
     for side in sides:
-        path = path_for(conn, ws, side)
-        if path:
-            ax.plot([x for x, _ in path], [m for _, m in path],
-                    color=SIDE_COLOR.get(side, "gray"), lw=1.3, label=f"{side} price", zorder=2)
+        path = paths.get(side) or []
+        mk = SIDE_MARKER.get(side, "o")
         for leg in (l for l in use if l["side"] == side):
             z, T = _f(leg["entry_z"]), _f(leg["sell_T"])
             pnl_total += _f(leg["realized_pnl"])
@@ -135,8 +144,10 @@ def review_window(conn, ws, legs, include_unfilled):
             # entry -> best-reachable connector + the two dots (no text; the legend
             # and y-axis carry the meaning, keeps clustered rounds readable)
             ax.plot([ex, bx], [z, by], color="#d62728", lw=0.7, alpha=0.35, zorder=4)
-            ax.scatter([ex], [z], color="green", s=30, zorder=6, edgecolor="black", linewidth=0.3)
-            ax.scatter([bx], [by], color="#d62728", s=30, zorder=6, edgecolor="black", linewidth=0.3)
+            ax.scatter([ex], [z], color="green", marker=mk, s=34, zorder=6,
+                       edgecolor="black", linewidth=0.3)
+            ax.scatter([bx], [by], color="#d62728", marker=mk, s=34, zorder=6,
+                       edgecolor="black", linewidth=0.3)
 
     ax.set_xlim(0, xmax)
     ax.set_ylim(0, 1)
@@ -165,13 +176,17 @@ def review_window(conn, ws, legs, include_unfilled):
     ax.set_title(f"round {ws}  —  resolved {outcome}  —  paper pnl {pnl_total:+.2f}  "
                  f"—  targets reached {reached}/{entered}{btc_sub}")
     ax.grid(True, alpha=0.2)
-    handles = [Line2D([], [], color=SIDE_COLOR.get(s, "gray"), lw=1.3, label=f"{s} price")
-               for s in sides]
+    handles = [Line2D([], [], color=SIDE_COLOR[s], lw=1.3, label=f"{s} token price")
+               for s in ("up", "down") if paths.get(s)]
     handles += [
         Line2D([], [], marker="o", color="w", markerfacecolor="green",
                markeredgecolor="black", markersize=7, label="buy fill (entry)"),
         Line2D([], [], marker="o", color="w", markerfacecolor="#d62728",
                markeredgecolor="black", markersize=7, label="best sell reachable after entry"),
+        Line2D([], [], marker="o", color="w", markerfacecolor="gray",
+               markeredgecolor="black", markersize=7, label="up order (circle)"),
+        Line2D([], [], marker="s", color="w", markerfacecolor="gray",
+               markeredgecolor="black", markersize=7, label="down order (square)"),
         Line2D([], [], color="purple", ls="--", lw=0.8, label="target (expected sell)"),
         Line2D([], [], color="#f0883e", lw=1.2, label="BTC price"),
     ]

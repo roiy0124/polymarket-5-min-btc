@@ -43,7 +43,9 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   and 0/M targets are reached, it's adverse selection made visible (the limit only fills when
   the move is against you). Reads `paper_trades.csv` + the DB price path; one PNG per round.
   Second y-axis overlays the **BTC price** and the **target/strike** (BTC at window start),
-  with `BTC strike → final` in the title — so you can see *why* the token moved.
+  with `BTC strike → final` in the title — so you can see *why* the token moved. Both token
+  lines are drawn (blue = up, brown = down) and order markers are shaped by side (circle =
+  up order, square = down order).
 
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min
