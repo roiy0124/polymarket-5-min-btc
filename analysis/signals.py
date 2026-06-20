@@ -36,8 +36,8 @@ import bisect
 import argparse
 
 from . import panel
-from .exit_maps import (entry_and_exit, wilson_lb, WINDOW, BUY_WIN_MIN_WIDTH,
-                        BUY_WIN_STEP)
+from .exit_maps import (entry_and_exit, wilson_lb, power_min_n, map_admit_threshold,
+                        WINDOW, BUY_WIN_MIN_WIDTH, BUY_WIN_STEP, ALPHA, POWER)
 
 LOOKBACKS = [("6h", 6 * 3600), ("12h", 12 * 3600), ("24h", 24 * 3600)]
 OUT_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -76,7 +76,7 @@ def dots_for(windows, side, cent):
     return res
 
 
-def find_signal(dots, z, cuts, min_win, min_roi, min_dots, min_frac):
+def find_signal(dots, z, cuts, min_win, min_roi, min_dots, min_frac, alpha, power):
     """Best (buy-window>=30s, sell T) clearing both floors in all lookbacks.
 
     Anti-cherry-pick: a window must hold an absolute floor of dots (min_dots) AND a
@@ -102,42 +102,41 @@ def find_signal(dots, z, cuts, min_win, min_roi, min_dots, min_frac):
             ok = True
             for (_, cut), tot in zip(cuts, totals):
                 sy = sorted(d[1] for d in in_win if d[2] >= cut)
-                # density gate: enough dots in absolute terms AND a real share of
-                # the map for this entry price (not a thin cherry-picked sliver)
+                # density floor (Liu MIS): enough dots in absolute terms AND a real
+                # share of the map — applied to every lookback so none is empty.
                 if len(sy) < min_dots or (tot > 0 and len(sy) < min_frac * tot):
                     ok = False
                     break
                 subs.append(sy)
             if not ok:
                 continue
+            primary = subs[-1]                       # 24h: the most complete sample
+            np_ = len(primary)
             for T in cand_T:
                 roi = (T - z) / z
-                reaches, lbs = [], []
-                good = True
-                for sy in subs:
-                    n = len(sy)
-                    r = n - bisect.bisect_left(sy, T - 1e-9)
-                    wr = r / n
-                    if wr < min_win:
-                        good = False
-                        break
-                    reaches.append(wr)
-                    lbs.append(wilson_lb(r, n))     # sample-size-honest win rate
-                if not good:
+                breakeven = z / T                    # win-rate at which EV = 0
+                # robustness: the observed win-rate clears the floor in ALL lookbacks
+                # (so the edge isn't only in old data), point estimates for display.
+                reaches = [(len(sy) - bisect.bisect_left(sy, T - 1e-9)) / len(sy)
+                           for sy in subs]
+                if min(reaches) < min_win:
                     continue
-                wlb = min(lbs)
-                # EV per $1 staked on the CONSERVATIVE win estimate: a win pays +roi,
-                # a miss loses the whole stake (a dot under the sell settles to 0).
-                ev = wlb * roi - (1.0 - wlb)
-                n_min = min(len(sy) for sy in subs)
+                # the STATISTICAL test runs on the primary (24h) sample: enough dots
+                # to prove win > breakeven (power gate), then rank by Wilson-LB EV.
+                r_p = np_ - bisect.bisect_left(primary, T - 1e-9)
+                wr_p = r_p / np_
+                if np_ < power_min_n(wr_p, breakeven, alpha, power):
+                    continue
+                wlb = wilson_lb(r_p, np_)
+                ev = wlb * roi - (1.0 - wlb)         # a miss loses the whole stake
                 key = (round(ev, 6), round(wlb, 4), t2 - t1)
                 if best is None or key > best[0]:
-                    best = (key, t1, t2, T, reaches, roi, ev, n_min)
+                    best = (key, t1, t2, T, reaches, roi, ev, np_)
     if best is None:
         return None
-    _, t1, t2, T, reaches, roi, ev, n_min = best
+    _, t1, t2, T, reaches, roi, ev, np_ = best
     return {"t1": t1, "t2": t2, "sell": round(T, 3), "roi": roi,
-            "wins": [round(r, 4) for r in reaches], "ev": ev, "n": n_min}
+            "wins": [round(r, 4) for r in reaches], "ev": ev, "n": np_}
 
 
 def _prompt(label, default, cast):
@@ -204,6 +203,10 @@ def main():
     ap.add_argument("--min-ev", type=float, default=0.0, dest="min_ev",
                     help="drop signals whose worst-case EV per $1 is <= this "
                          "(default 0 = must be profitable)")
+    ap.add_argument("--alpha", type=float, default=ALPHA,
+                    help="significance for the adaptive sample-size gate (default 0.05)")
+    ap.add_argument("--power", type=float, default=POWER,
+                    help="power for the adaptive sample-size gate (default 0.80)")
     ap.add_argument("--show", action="store_true",
                     help="print the saved signals.json and exit (no recompute)")
     args = ap.parse_args()
@@ -236,18 +239,35 @@ def main():
     conn.close()
 
     print(f"Signal finder  |  floors: win>= {args.min_win:.0%}  ROI>= {args.min_roi:+.0%}"
-          f"  EV> {args.min_ev:+.2f}  |  density: >= {args.min_dots} dots & "
-          f">= {args.min_frac:.0%} of the price's dots  |  bet ${args.usd:g}  "
-          f"entry>= {args.min_entry:.2f}  |  robust across {lbnames}  |  {len(windows)} windows")
+          f"  EV> {args.min_ev:+.2f}  |  bet ${args.usd:g}  entry>= {args.min_entry:.2f}"
+          f"  |  robust across {lbnames}  |  {len(windows)} windows")
+    print(f"  gates: density >= {args.min_dots} dots & >= {args.min_frac:.0%} of the map; "
+          f"adaptive sample-size to prove win>breakeven at alpha={args.alpha:g}/"
+          f"power={args.power:g}")
 
     lo = max(1, int(round(args.min_entry * 100)))
+    longest_cut = cuts[-1][1]                       # 24h: the most complete sample
+    # pass 1: cache each map's dots + its total, then the per-map admission floor
+    cached, totals = {}, []
+    for side in ("up", "down"):
+        for cent in range(lo, 50):                  # entry in [min_entry, 0.50)
+            d = dots_for(windows, side, cent)
+            cached[(side, cent)] = d
+            totals.append(sum(1 for dd in d if dd[2] >= longest_cut))
+    admit = map_admit_threshold(totals)
+    print(f"  per-map admission: a price needs >= {admit:.0f} dots (median-based) to be "
+          f"considered")
+
+    # pass 2: only maps above the admission floor get a fitted signal
     signals = []
     for side in ("up", "down"):
-        for cent in range(lo, 50):     # entry in [min_entry, 0.50)
+        for cent in range(lo, 50):
+            d = cached[(side, cent)]
+            if sum(1 for dd in d if dd[2] >= longest_cut) < admit:
+                continue                            # map too thin to trust
             z = cent / 100.0
-            d = dots_for(windows, side, cent)
             sig = find_signal(d, z, cuts, args.min_win, args.min_roi,
-                              args.min_dots, args.min_frac)
+                              args.min_dots, args.min_frac, args.alpha, args.power)
             if sig and sig["ev"] > args.min_ev:     # must clear the EV floor
                 sig.update({"side": side, "entry": z,
                             "shares": round(args.usd / z, 2)})
@@ -264,6 +284,7 @@ def main():
         json.dump({"generated": now, "min_win": args.min_win, "min_roi": args.min_roi,
                    "min_ev": args.min_ev, "min_entry": args.min_entry,
                    "min_dots": args.min_dots, "min_frac": args.min_frac,
+                   "alpha": args.alpha, "power": args.power,
                    "usd": args.usd, "signals": signals}, f, indent=2)
     print(f"\n  saved -> {OUT_JSON}  (Phase 2 will consume this after you validate)")
     print("  EV/$1 = worst-case-win x ROI - (1 - worst-case-win); >0 means profitable.")

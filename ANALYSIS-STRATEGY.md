@@ -134,25 +134,39 @@ rounds, and likely a regime / toxic-flow filter ([[btc-updown-meanrev-assessment
 Scanning many (window, sell-price) candidates and keeping the best is a
 **selection-bias / multiple-comparisons** trap: the winner's in-sample numbers are
 upward-biased, and the search gravitates to **thin slivers** where a few rounds
-happened to win. Two current guards (in both `exit_maps.py` and `signals.py`):
-1. **Density gate** — a window must hold an absolute floor of dots (`min_dots`) AND a
-   real **share** of the price's dots (`min_frac`, default 20%). Stops a line landing
-   on an 8-dot sliver of a 95-dot map.
-2. **Confidence-adjusted EV (Wilson lower bound)** — ranks by `wlb·ROI − (1−wlb)`, so
-   small-n windows are demoted vs dense ones at the same observed rate.
+happened to win. The guards (in both `exit_maps.py` and `signals.py`), grounded in a
+verified research pass (Brown/Cai/DasGupta 2001; Bailey & López de Prado 2014; White
+2000; Liu/Hsu/Ma 1999):
 
-**KNOWN LIMITATION (open):** both thresholds are **fixed**, which is crude. A fixed
-`min_dots` can't say "11 dots is fine for a sparse map but noise against a map whose
-median window holds ~95" (e.g. `entry@99c`, n=11, ROI +1% — pure noise). And `min_frac`
-is genuinely hard to set — the right density is case-sensitive. The thresholds *should
-be adaptive* — proportional to each map's data and grounded in statistical power /
-support theory, not arbitrary constants. **A deep-research pass on adaptive sample-size
-and density/support thresholds (plus multiple-comparisons and out-of-sample guards) is
-underway; the recommendation will replace the fixed knobs.** Candidate directions to
-evaluate: minimum-n from a target CI half-width / power to distinguish 65% from 50%;
-support set relative to the map's median/percentile; empirical-Bayes shrinkage of the
-win-rate toward the base rate; FDR / deflated-metric correction for the search; and a
-train/validation split so the chosen line must survive out-of-sample.
+1. **Per-map admission (adaptive)** — skip an entry price whose total dots fall below
+   `max(MAP_FLOOR=20, MAP_FRAC=0.30 × median-across-maps)`. This is the "a map with 11
+   dots is noise against a median of ~95" rule (`entry@99c` is now refused a line). Scales
+   to the actual data instead of a fixed count.
+2. **Density floor (Liu MIS, adaptive)** — a window must hold `max(min_dots, min_frac ×
+   map_total)` dots. The proportional `min_frac` term *is* the canonical Multiple-Minimum-
+   Support fix for "fixed support is inadequate"; `min_dots` is the hard floor `LS`.
+3. **Adaptive sample-size gate (power formula)** — a window must hold enough dots to prove
+   its win-rate beats the line's **breakeven** `z/T` (NOT just 0.5, so high-ROI/low-win
+   lines stay valid) at `alpha=0.05`, `power=0.80`:
+   `n ≥ ([z_α√(p0(1−p0)) + z_β√(pa(1−pa))] / (pa−p0))²` (Fleiss/Stata). A strong edge needs
+   few dots (90%-win → ~8), a marginal one needs many (65%-win-vs-50% → ~67). This replaces
+   the fixed `min_dots` as the *statistical* requirement and scales with edge strength.
+   In the finder it runs on the **24h sample** (most data); 6h/12h are robustness checks
+   (the observed win still clears the floor recently).
+4. **Confidence-adjusted EV (Wilson LB)** — ranks by `wlb·ROI − (1−wlb)`; `EVadj > 0` is
+   exactly the test that the win-rate's lower bound beats breakeven. Validated as the right
+   small-n tool (Wald/`np≥5` rules have "chaotic coverage… cannot be trusted").
+
+**The deepest finding — selection bias is the real danger, no in-sample threshold fixes
+it.** Scanning many (window, T) and keeping the EV-max ALWAYS inflates in-sample numbers,
+and overfit maxima go *systematically negative* out-of-sample (Bailey/López de Prado:
+"there is no SR threshold that can be considered safe"; ~45 variants → chance Sharpe ≥ 1.0
+more likely than not). The only real defense is **trial-count-aware out-of-sample
+validation — which is exactly what the Phase-2 paper forward-test is** (future rounds the
+finder never saw). The thresholds above keep the candidate set honest; **the paper test is
+the judge.** (Future option, not yet built: a finder-internal train/validate split or a
+PBO/CSCV estimate to catch overfit before paper.) Knobs: `--alpha`, `--power`, `--min-frac`,
+`--min-dots`; per-map `MAP_FRAC`/`MAP_FLOOR` at the top of `exit_maps.py`.
 
 ## Per-round charts (ground-truth viewer) — `round_charts/`
 `chart_capture.py` (a supervised service; backfill with `python chart_capture.py --once`)

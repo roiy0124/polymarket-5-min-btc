@@ -47,6 +47,22 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   lines are drawn (blue = up, brown = down) and order markers are shaped by side (circle =
   up order, square = down order).
 
+## Adaptive thresholds — research-grounded, not fixed constants (`signals.py`, `exit_maps.py`)
+- Replaced the two fixed gates with adaptive, statistically-grounded ones (verified research:
+  Brown/Cai/DasGupta 2001, Bailey & López de Prado 2014, White 2000, Liu/Hsu/Ma 1999):
+  - **Per-map admission** — skip an entry price below `max(20, 0.30 × median-across-maps)`
+    total dots, so a thin map (e.g. `99c`, n=11 vs median ~95) gets no line at all.
+  - **Adaptive sample-size gate (power formula)** — a window needs enough dots to prove its
+    win-rate beats the line's **breakeven** `z/T` at `alpha=0.05`/`power=0.80`. Strong edges
+    need few dots (90%→~8), marginal ones need many (65%-vs-50%→~67). Runs on the 24h sample
+    in the finder; 6h/12h stay robustness checks. Knobs `--alpha`/`--power`.
+  - Kept the Liu-MIS density floor (`min_dots`, `min_frac`) and the Wilson-LB EVadj rank.
+- **The dominant guard is out-of-sample:** the research is emphatic that no in-sample
+  threshold is safe against selection bias (scanning many lines and keeping the max), and
+  overfit maxima invert OOS. The **Phase-2 paper forward-test is that trial-count-aware OOS
+  judge** — the thresholds keep candidates honest; paper decides. Exit maps now print a
+  per-map admission floor and label refused maps "too thin to fit a line".
+
 ## Anti-cherry-pick: statistical lines, not lucky slivers (`signals.py`, `exit_maps.py`)
 - A buy-window used to qualify on as few as 5–8 dots, so the finder could place a high-ROI
   line on a thin sliver of entry-times where a handful of rounds happened to win — anecdote,

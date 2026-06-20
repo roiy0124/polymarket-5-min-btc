@@ -20,6 +20,7 @@ y is the best MID (a mild upper bound; real sells hit the bid). Exploratory only
 import os
 import math
 import bisect
+import statistics
 
 import matplotlib
 matplotlib.use("Agg")
@@ -31,10 +32,15 @@ WINDOW = 300.0
 SELL_THRESHOLD = 0.01   # the price must clear entry by this much to count as a real exit
 EXEC_DELAY_SEC = 0.4    # signal->execution latency: ignore price action this soon after entry
 BUY_WIN_MIN_WIDTH = 0.5   # minutes; the best buy-time window must be >= this (30s)
-BUY_WIN_MIN_DOTS = 10     # absolute floor: this many entries in a window to consider it
-BUY_WIN_MIN_FRAC = 0.20   # AND the window must hold this share of the price's dots
+BUY_WIN_MIN_DOTS = 8      # hard absolute floor (Liu MIS 'LS'): never fewer than this
+BUY_WIN_MIN_FRAC = 0.20   # proportional floor (Liu MIS 'beta*f'): share of the map's dots
 BUY_WIN_STEP = 0.25       # minutes; grid for scanning window boundaries
-WILSON_Z = 1.0            # confidence multiplier for the win-rate lower bound (~84% one-sided)
+WILSON_Z = 1.0            # confidence multiplier for the win-rate lower bound used to RANK
+# Adaptive sample-size gate (power formula, Fleiss/Stata) and per-map admission:
+ALPHA = 0.05              # one-sided significance for "win-rate beats breakeven"
+POWER = 0.80              # power to detect that edge -> sets the min dots a line needs
+MAP_FRAC = 0.30           # a map must hold >= this share of the median map's dots...
+MAP_FLOOR = 20            # ...AND at least this many total, else it's too thin to trust
 OUTDIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "exit_maps")
 
@@ -50,6 +56,31 @@ def wilson_lb(k, n, z=WILSON_Z):
     centre = p + z * z / (2.0 * n)
     margin = z * math.sqrt((p * (1.0 - p) + z * z / (4.0 * n)) / n)
     return max(0.0, (centre - margin) / denom)
+
+
+def power_min_n(pa, p0, alpha=ALPHA, power=POWER):
+    """Minimum sample size to distinguish an observed proportion `pa` from a null
+    `p0` (one-sided, one-sample proportion test; Fleiss/Levin/Paik via Stata pss-2):
+        n = ([z_alpha*sqrt(p0(1-p0)) + z_power*sqrt(pa(1-pa))] / (pa-p0))^2
+    Here p0 is the line's BREAKEVEN win-rate (z/T), so the gate asks "are there
+    enough dots to prove this win-rate is really above breakeven?". A strong edge
+    (pa far above p0) needs few dots; a marginal one needs many. Returns a large
+    sentinel when pa <= p0 (no positive edge to detect)."""
+    if not (0.0 < p0 < 1.0) or pa <= p0:
+        return 10 ** 9
+    za = statistics.NormalDist().inv_cdf(1.0 - alpha)
+    zb = statistics.NormalDist().inv_cdf(power)
+    num = za * math.sqrt(p0 * (1.0 - p0)) + zb * math.sqrt(pa * (1.0 - pa))
+    return int(math.ceil((num / (pa - p0)) ** 2))
+
+
+def map_admit_threshold(totals):
+    """Per-map admission floor from the median map size: max(MAP_FLOOR, MAP_FRAC*median).
+    `totals` = the per-map total dot counts. A map below this is too thin to trust
+    (e.g. entry@99c with n=11 vs a median ~95)."""
+    nz = [t for t in totals if t > 0]
+    med = statistics.median(nz) if nz else 0
+    return max(MAP_FLOOR, MAP_FRAC * med)
 
 
 def load_windows(conn):
@@ -124,7 +155,7 @@ def best_sell_window(dots, z):
                 continue
             ys = sorted(d[1] for d in dots if t1 <= d[0] <= t2)
             n = len(ys)
-            if n < min_dots:                          # density gate (dots AND share)
+            if n < min_dots:                          # density floor (dots AND share)
                 continue
             for T in sorted(set(ys)):
                 if T <= z + 1e-9:
@@ -132,6 +163,10 @@ def best_sell_window(dots, z):
                 reach = n - bisect.bisect_left(ys, T - 1e-9)   # dots with y >= T
                 win_rate = reach / n
                 roi = (T - z) / z
+                breakeven = z / T                     # win-rate at which EV = 0
+                # ADAPTIVE sample-size gate: enough dots to prove win > breakeven
+                if n < power_min_n(win_rate, breakeven):
+                    continue
                 wlb = wilson_lb(reach, n)
                 ev = wlb * roi - (1.0 - wlb)          # confidence-adjusted EV per $1
                 key = (round(ev, 6), wlb, t2 - t1)
@@ -143,7 +178,7 @@ def best_sell_window(dots, z):
     return t1, t2, T, win_rate, roi, ev, n
 
 
-def make_plot(side, cent, dots, outpath):
+def make_plot(side, cent, dots, outpath, admit=True):
     z = cent / 100.0
     fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=85)
     if dots:
@@ -167,7 +202,11 @@ def make_plot(side, cent, dots, outpath):
     # best (buy-window, sell price) sweet spot (max win_rate x ROI): shade the
     # window, draw the SELL line (dots above = win, below = loss), label it, and
     # print the sell price in the right margin (outside the plot).
-    bw = best_sell_window(dots, z)
+    bw = best_sell_window(dots, z) if admit else None
+    if not admit and dots:
+        ax.text(0.02, 0.035, f"map too thin to fit a line (n={len(dots)})",
+                transform=ax.transAxes, fontsize=7.5, color="#999", style="italic",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#ccc", alpha=0.9))
     if bw:
         t1, t2, sell_T, wr, roi, ev, n = bw
         ax.axvspan(t1, t2, color="#3fb950", alpha=0.08, zorder=0)
@@ -193,10 +232,9 @@ def main():
     conn = panel.connect()
     windows = load_windows(conn)
     conn.close()
-    nonempty = {"up": 0, "down": 0}
+    # pass 1: build every map's dots, then the per-map admission threshold (median-based)
+    all_dots = {}
     for side in ("up", "down"):
-        sd = os.path.join(OUTDIR, side)
-        os.makedirs(sd, exist_ok=True)
         for cent in range(1, 100):
             dots = []
             for w in windows:
@@ -205,13 +243,24 @@ def main():
                 if eb is None:
                     continue
                 x, y = eb
-                color = "g" if w["outcome"] == "Up" else "r"
-                dots.append((x, y, color))
+                dots.append((x, y, "g" if w["outcome"] == "Up" else "r"))
+            all_dots[(side, cent)] = dots
+    threshold = map_admit_threshold([len(v) for v in all_dots.values()])
+    # pass 2: plot; only maps above the threshold get a fitted sell line
+    for side in ("up", "down"):
+        sd = os.path.join(OUTDIR, side)
+        os.makedirs(sd, exist_ok=True)
+        nonempty = admitted = 0
+        for cent in range(1, 100):
+            dots = all_dots[(side, cent)]
             if dots:
-                nonempty[side] += 1
-            make_plot(side, cent, dots, os.path.join(sd, f"entry_{cent:02d}c.png"))
-        print(f"  {side}: wrote 99 charts ({nonempty[side]} with data) -> {sd}")
-    print(f"done. {len(windows)} settled windows. open exit_maps/up and exit_maps/down")
+                nonempty += 1
+            admit = len(dots) >= threshold
+            admitted += int(admit)
+            make_plot(side, cent, dots, os.path.join(sd, f"entry_{cent:02d}c.png"), admit=admit)
+        print(f"  {side}: wrote 99 charts ({nonempty} with data, {admitted} admitted) -> {sd}")
+    print(f"done. {len(windows)} settled windows. map admission floor: n >= {threshold:.0f} "
+          f"dots. open exit_maps/up and exit_maps/down")
 
 
 if __name__ == "__main__":
