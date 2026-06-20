@@ -47,13 +47,22 @@ def ask(prompt, default):
     return v or str(default)
 
 
-def ask_scope():
-    """Return env for the analysis subprocess: current DB, or last X days
-    (merging old_dbs/). None = current only."""
-    print("\n  data scope:  [1] current fresh DB   [2] last X days (incl. old_dbs)")
-    if (input("  scope [1]: ").strip() or "1") == "2":
-        return {"BTC_ANALYSIS_DAYS": ask("how many days", 7)}
-    return None
+def ask_scope(unit="days"):
+    """Return env for the analysis subprocess: current fresh DB, or the last X
+    days/hours (merging old_dbs/). None = current only. `unit` only changes the
+    prompt wording/granularity; the env var is always BTC_ANALYSIS_DAYS (fractional
+    days are fine, so hours convert cleanly)."""
+    span = "last X hours" if unit == "hours" else "last X days"
+    print(f"\n  data scope:  [1] current fresh DB   [2] {span} (incl. old_dbs)")
+    if (input("  scope [1]: ").strip() or "1") != "2":
+        return None
+    if unit == "hours":
+        try:
+            days = float(ask("how many hours", 24)) / 24.0
+        except ValueError:
+            days = 1.0
+        return {"BTC_ANALYSIS_DAYS": f"{days:.6f}"}
+    return {"BTC_ANALYSIS_DAYS": ask("how many days", 7)}
 
 
 def _launch_supervisor():
@@ -139,8 +148,8 @@ def _signals_meta():
         return None
 
 
-def _run_finder(meta, pause=False):
-    """Re-evaluate signals on the current live DB. With meta, reuse the prior
+def _run_finder(meta, scope=None, pause=False):
+    """Re-evaluate signals over the chosen data scope. With meta, reuse the prior
     floors (automatic re-eval); without, prompt for them (first-time generate)."""
     if meta:
         win, roi = meta.get("min_win", 0.70), meta.get("min_roi", 0.50)
@@ -155,7 +164,7 @@ def _run_finder(meta, pause=False):
         entry = ask("min entry price", 0.10)
         fev = ask("finder min EV per $1 (0 = must be profitable)", 0.0)
     run([PY, "-m", "analysis.signals", "--min-win", win, "--min-roi", roi,
-         "--usd", usd, "--min-entry", entry, "--min-ev", fev], pause=pause)
+         "--usd", usd, "--min-entry", entry, "--min-ev", fev], pause=pause, env_extra=scope)
 
 
 def a_phase2():
@@ -166,14 +175,14 @@ def a_phase2():
     gen = meta.get("generated") if meta else None
     age = (time.time() - gen) / 60.0 if gen else None
 
-    if meta is None:
-        print("\n  no signals.json yet -- generating fresh signals first.")
-        _run_finder(None, pause=False)
-    elif age is None or age > SIGNALS_FRESH_MIN:
-        shown = f"{age:.0f}" if age is not None else "?"
-        print(f"\n  signals are {shown} min old (> {SIGNALS_FRESH_MIN}) -- "
-              f"re-evaluating on fresh live data...")
-        _run_finder(meta, pause=False)
+    if meta is None or age is None or age > SIGNALS_FRESH_MIN:
+        if meta is None:
+            print("\n  no signals.json yet -- generating fresh signals first.")
+        else:
+            shown = f"{age:.0f}" if age is not None else "?"
+            print(f"\n  signals are {shown} min old (> {SIGNALS_FRESH_MIN}) -- re-evaluating...")
+        scope = ask_scope(unit="hours")     # which data window to build signals from
+        _run_finder(meta, scope, pause=False)
     else:
         print(f"\n  signals are {age:.0f} min old (<= {SIGNALS_FRESH_MIN}) -- using them:")
         run([PY, "-m", "analysis.signals", "--show"], pause=False)

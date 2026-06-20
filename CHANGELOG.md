@@ -21,6 +21,12 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   floor; if **> 20 min** old (or missing) it **re-evaluates on fresh live data** first —
   reusing the prior floors automatically — and only then asks for the EV floor. Finder
   now stores `min_entry` in `signals.json` so re-eval reproduces faithfully.
+- **Bot startup now asks the data scope** (like exit maps): when it (re)generates
+  signals it offers `[1] current fresh DB` or `[2] last X hours` (merging `old_dbs/`),
+  so you can build signals from more history than the live DB holds — useful after a DB
+  reset. `ask_scope(unit="hours")` converts to fractional `BTC_ANALYSIS_DAYS`. (The live
+  paper-execution loop still runs on the current DB — scope only governs the signal
+  source. Pick ≥ 24h so the 6h/12h/24h lookbacks all have data.)
 - **Paper ledger summary (`analysis/paper_ledger.py`, menu 13)** — the scoreboard for
   the forward-test. Per signal and overall: attempts, fill%, win%, total PnL, and three
   EVs — `EVpred` (Phase-1 prediction), `EVfill` (realized per $1 on filled legs, the
