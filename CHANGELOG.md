@@ -42,6 +42,8 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   outcome, paper PnL, and **targets reached N/M**. When entries ride the price the wrong way
   and 0/M targets are reached, it's adverse selection made visible (the limit only fills when
   the move is against you). Reads `paper_trades.csv` + the DB price path; one PNG per round.
+  Second y-axis overlays the **BTC price** and the **target/strike** (BTC at window start),
+  with `BTC strike → final` in the title — so you can see *why* the token moved.
 
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min

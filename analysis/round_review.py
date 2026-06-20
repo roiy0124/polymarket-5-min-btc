@@ -65,6 +65,21 @@ def path_for(conn, ws, side):
     return out
 
 
+def btc_path(conn, ws):
+    """[(minutes_in, btc_price)] over the window (Binance)."""
+    rows = conn.execute(
+        "SELECT time_left, btc_binance FROM snapshots WHERE window_start=? "
+        "AND btc_binance IS NOT NULL ORDER BY ts", (ws,)).fetchall()
+    return [(max(0.0, (WINDOW - tl) / 60.0), b) for tl, b in rows]
+
+
+def btc_levels(conn, ws):
+    """(strike, final) BTC price for the window — the target and where it ended."""
+    row = conn.execute("SELECT strike_binance, final_binance FROM windows "
+                       "WHERE window_start=?", (ws,)).fetchone()
+    return (row[0], row[1]) if row else (None, None)
+
+
 def entry_and_best(path, z, tol=0.005):
     """First touch of the entry price z, then the best (max) price reachable after.
     Returns (entry_x, best_x, best_y) or None if z was never touched."""
@@ -119,27 +134,51 @@ def review_window(conn, ws, legs, include_unfilled):
                 reached += 1
             # entry -> best-reachable connector + the two dots (no text; the legend
             # and y-axis carry the meaning, keeps clustered rounds readable)
-            ax.plot([ex, bx], [z, by], color="orange", lw=0.7, alpha=0.35, zorder=4)
+            ax.plot([ex, bx], [z, by], color="#d62728", lw=0.7, alpha=0.35, zorder=4)
             ax.scatter([ex], [z], color="green", s=30, zorder=6, edgecolor="black", linewidth=0.3)
-            ax.scatter([bx], [by], color="orange", s=30, zorder=6, edgecolor="black", linewidth=0.3)
+            ax.scatter([bx], [by], color="#d62728", s=30, zorder=6, edgecolor="black", linewidth=0.3)
 
     ax.set_xlim(0, xmax)
     ax.set_ylim(0, 1)
     ax.set_xlabel("minutes into round")
-    ax.set_ylabel("price")
+    ax.set_ylabel("token price (implied probability)")
+
+    # --- right axis: BTC price + target/strike (why the token moved) ---
+    bp = btc_path(conn, ws)
+    strike, final = btc_levels(conn, ws)
+    ax2 = ax.twinx()
+    ax2.set_zorder(ax.get_zorder() - 1)      # keep BTC behind the token markers
+    ax.patch.set_visible(False)
+    if bp:
+        ax2.plot([x for x, _ in bp], [b for _, b in bp], color="#f0883e", lw=1.2, zorder=1)
+        anchors = [b for _, b in bp] + ([strike] if strike else [])
+        lo, hi = min(anchors), max(anchors)
+        pad = max((hi - lo) * 0.35, 3.0)
+        ax2.set_ylim(lo - pad, hi + pad)
+        if strike:
+            ax2.axhline(strike, ls="--", color="#d4a017", lw=1.1, zorder=1)
+        ax2.set_ylabel("BTC price (USD)", color="#f0883e")
+        ax2.tick_params(axis="y", labelcolor="#f0883e")
+        ax2.ticklabel_format(axis="y", style="plain", useOffset=False)
+
+    btc_sub = f"  —  BTC {strike:.0f} → {final:.0f}" if (strike and final) else ""
     ax.set_title(f"round {ws}  —  resolved {outcome}  —  paper pnl {pnl_total:+.2f}  "
-                 f"—  targets reached {reached}/{entered}")
+                 f"—  targets reached {reached}/{entered}{btc_sub}")
     ax.grid(True, alpha=0.2)
     handles = [Line2D([], [], color=SIDE_COLOR.get(s, "gray"), lw=1.3, label=f"{s} price")
                for s in sides]
     handles += [
         Line2D([], [], marker="o", color="w", markerfacecolor="green",
                markeredgecolor="black", markersize=7, label="buy fill (entry)"),
-        Line2D([], [], marker="o", color="w", markerfacecolor="orange",
+        Line2D([], [], marker="o", color="w", markerfacecolor="#d62728",
                markeredgecolor="black", markersize=7, label="best sell reachable after entry"),
         Line2D([], [], color="purple", ls="--", lw=0.8, label="target (expected sell)"),
+        Line2D([], [], color="#f0883e", lw=1.2, label="BTC price"),
     ]
-    ax.legend(handles=handles, loc="upper left", fontsize=8)
+    if strike:
+        handles.append(Line2D([], [], color="#d4a017", ls="--", lw=1.1,
+                              label=f"target / strike  {strike:.0f}"))
+    ax.legend(handles=handles, loc="upper left", fontsize=7.5, framealpha=0.9)
     os.makedirs(OUTDIR, exist_ok=True)
     outpath = os.path.join(OUTDIR, f"round_{ws}.png")
     fig.savefig(outpath, bbox_inches="tight", dpi=110)

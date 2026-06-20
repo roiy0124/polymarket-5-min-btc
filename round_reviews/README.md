@@ -8,9 +8,12 @@ Each chart plots the traded token's price path over the 5-minute round and marks
 - **green dot — buy fill (entry):** where the resting BUY filled, at the entry price `z`.
 - **purple dashed — target (expected sell):** the price `T` the signal wanted to sell at,
   drawn higher up the y-axis.
-- **orange dot — best sell reachable after entry:** the highest price the token actually
+- **red dot — best sell reachable after entry:** the highest price the token actually
   reached *after* the entry, until the round ended. If it sits **below** the target, the
   sell could never have filled and the position rode to settlement (0/1).
+- **orange line + gold dashed (right axis) — BTC price and target/strike:** the BTC price
+  over the round and the strike (BTC at window start). The token moves because BTC moves
+  relative to the strike, so this shows *why* each round resolved as it did.
 
 The title shows the resolved outcome, the paper PnL, and **targets reached N/M** — a quick
 read on how often the expected sell was actually achievable. A round where the entries ride
