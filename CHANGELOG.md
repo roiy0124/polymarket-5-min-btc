@@ -21,6 +21,13 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   floor; if **> 20 min** old (or missing) it **re-evaluates on fresh live data** first —
   reusing the prior floors automatically — and only then asks for the EV floor. Finder
   now stores `min_entry` in `signals.json` so re-eval reproduces faithfully.
+- **Paper ledger summary (`analysis/paper_ledger.py`, menu 13)** — the scoreboard for
+  the forward-test. Per signal and overall: attempts, fill%, win%, total PnL, and three
+  EVs — `EVpred` (Phase-1 prediction), `EVfill` (realized per $1 on filled legs, the
+  apples-to-apples check), and `EVatt` (realized per $1 across all attempts, folding in
+  fill rate). Prints the **adverse-selection gap** (`EVfill − EVpred`). Flags signals
+  with < 10 attempts as noisy. Ledger gains exact `bought`/`sold` columns so realized EV
+  is computed from actual filled quantities, not assumed full fills.
 
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min

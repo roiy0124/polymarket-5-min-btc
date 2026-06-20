@@ -156,4 +156,5 @@ class StrategyRunner:
                                   (f"{settle_px:.2f}" if buy_filled else "")),
             "realized_pnl": round(pnl, 4), "ev_predicted": round(s["ev"], 4),
             "won": int(won), "shares": s["shares"],
+            "bought": round(bought, 4), "sold": round(sold, 4),
         }

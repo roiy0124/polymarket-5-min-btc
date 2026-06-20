@@ -35,7 +35,7 @@ SIGNALS = os.path.join(HERE, "signals.json")
 LEDGER = os.path.join(HERE, "paper_trades.csv")
 FIELDS = ["window_start", "side", "entry_z", "buy_filled", "fill_px", "sell_T",
           "sell_filled", "exit_or_settle_px", "realized_pnl", "ev_predicted",
-          "won", "shares"]
+          "won", "shares", "bought", "sold"]
 
 
 def log(msg):

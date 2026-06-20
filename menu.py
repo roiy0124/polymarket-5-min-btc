@@ -188,6 +188,11 @@ def a_phase2():
     run([PY, "phase2.py", "--min-ev", ev])
 
 
+def a_paper_ledger():
+    n = ask("min attempts per signal to show", 1)
+    run([PY, "-m", "analysis.paper_ledger", "--min-n", n])
+
+
 def a_paper():
     o = ask("outcome (up/down)", "down")
     p = ask("entry price", 0.22)
@@ -278,12 +283,13 @@ MENU = [
     ("11", "Combo EV scan", a_combo_ev),
     ("EXECUTION (paper)", None),
     ("12", "PHASE 2 -- paper executor (live forward-test of signals.json)", a_phase2),
-    ("13", "Paper-trade a single limit order", a_paper),
-    ("14", "Execution engine self-test", a_selftest),
+    ("13", "Paper ledger summary (realized vs predicted EV)", a_paper_ledger),
+    ("14", "Paper-trade a single limit order", a_paper),
+    ("15", "Execution engine self-test", a_selftest),
     ("SERVICES", None),
-    ("15", "Start collectors", a_start),
-    ("16", "Stop collectors", a_stop),
-    ("17", "Create NEW database (archive current -> old_dbs/)", a_new_database),
+    ("16", "Start collectors", a_start),
+    ("17", "Stop collectors", a_stop),
+    ("18", "Create NEW database (archive current -> old_dbs/)", a_new_database),
 ]
 ACTIONS = {row[0]: row[2] for row in MENU if row[1] is not None}
 
