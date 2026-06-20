@@ -35,6 +35,14 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   with < 10 attempts as noisy. Ledger gains exact `bought`/`sold` columns so realized EV
   is computed from actual filled quantities, not assumed full fills.
 
+## Round reviews (`analysis/round_review.py`, `round_reviews/`, menu 14)
+- Per-round charts of what the **paper executor** actually did: the traded token's price
+  path with **green** entry-fill dots, the **purple** expected-sell target up the y-axis,
+  and the **orange** best price reachable after entry until round end. Title shows resolved
+  outcome, paper PnL, and **targets reached N/M**. When entries ride the price the wrong way
+  and 0/M targets are reached, it's adverse selection made visible (the limit only fills when
+  the move is against you). Reads `paper_trades.csv` + the DB price path; one PNG per round.
+
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min
   win-rate AND min ROI) in ALL THREE lookbacks (**6h / 12h / 24h**). Salvages a line

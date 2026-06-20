@@ -202,6 +202,11 @@ def a_paper_ledger():
     run([PY, "-m", "analysis.paper_ledger", "--min-n", n])
 
 
+def a_round_review():
+    n = ask("how many recent rounds to render", 20)
+    run([PY, "-m", "analysis.round_review", "--last", n])
+
+
 def a_paper():
     o = ask("outcome (up/down)", "down")
     p = ask("entry price", 0.22)
@@ -293,12 +298,13 @@ MENU = [
     ("EXECUTION (paper)", None),
     ("12", "PHASE 2 -- paper executor (live forward-test of signals.json)", a_phase2),
     ("13", "Paper ledger summary (realized vs predicted EV)", a_paper_ledger),
-    ("14", "Paper-trade a single limit order", a_paper),
-    ("15", "Execution engine self-test", a_selftest),
+    ("14", "Round reviews (per-round charts of paper games)", a_round_review),
+    ("15", "Paper-trade a single limit order", a_paper),
+    ("16", "Execution engine self-test", a_selftest),
     ("SERVICES", None),
-    ("16", "Start collectors", a_start),
-    ("17", "Stop collectors", a_stop),
-    ("18", "Create NEW database (archive current -> old_dbs/)", a_new_database),
+    ("17", "Start collectors", a_start),
+    ("18", "Stop collectors", a_stop),
+    ("19", "Create NEW database (archive current -> old_dbs/)", a_new_database),
 ]
 ACTIONS = {row[0]: row[2] for row in MENU if row[1] is not None}
 
