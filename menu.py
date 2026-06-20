@@ -12,6 +12,7 @@ Python's standard-library `operator` module and break every script in this folde
 
 import os
 import sys
+import json
 import time
 import shutil
 import sqlite3
@@ -21,9 +22,11 @@ import webbrowser
 HERE = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
 DB = os.path.join(HERE, "btc_updown.db")
+SIGNALS = os.path.join(HERE, "signals.json")
 OLD_DBS = os.path.join(HERE, "old_dbs")
 STOP = os.path.join(HERE, "STOP")
 DASH = "http://127.0.0.1:8765"
+SIGNALS_FRESH_MIN = 20      # bot startup: re-evaluate signals older than this
 
 
 def run(cmd, pause=True, env_extra=None):
@@ -127,8 +130,59 @@ def a_signals():
          "--usd", usd, "--min-entry", entry, "--min-ev", ev], env_extra=scope)
 
 
+def _signals_meta():
+    """Load signals.json (dict) or None if missing/unreadable."""
+    try:
+        with open(SIGNALS) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _run_finder(meta, pause=False):
+    """Re-evaluate signals on the current live DB. With meta, reuse the prior
+    floors (automatic re-eval); without, prompt for them (first-time generate)."""
+    if meta:
+        win, roi = meta.get("min_win", 0.70), meta.get("min_roi", 0.50)
+        usd, entry = meta.get("usd", 2), meta.get("min_entry", 0.10)
+        fev = meta.get("min_ev", 0.0)
+        print(f"  reusing prior floors: win>= {float(win):.0%}  ROI>= {float(roi):+.0%}"
+              f"  EV> {fev}  bet ${usd}  entry>= {entry}")
+    else:
+        win = ask("min win-rate (e.g. 0.70)", 0.70)
+        roi = ask("min ROI (e.g. 0.50)", 0.50)
+        usd = ask("bet USD per trade", 2)
+        entry = ask("min entry price", 0.10)
+        fev = ask("finder min EV per $1 (0 = must be profitable)", 0.0)
+    run([PY, "-m", "analysis.signals", "--min-win", win, "--min-roi", roi,
+         "--usd", usd, "--min-entry", entry, "--min-ev", fev], pause=pause)
+
+
 def a_phase2():
-    ev = ask("min EV per $1 to trade (e.g. 0.5)", 0.5)
+    """Bot startup: ensure signals are fresh (<=20 min) -- showing them if so,
+    re-evaluating on live data if not -- then choose the EV floor and launch the
+    paper executor."""
+    meta = _signals_meta()
+    gen = meta.get("generated") if meta else None
+    age = (time.time() - gen) / 60.0 if gen else None
+
+    if meta is None:
+        print("\n  no signals.json yet -- generating fresh signals first.")
+        _run_finder(None, pause=False)
+    elif age is None or age > SIGNALS_FRESH_MIN:
+        shown = f"{age:.0f}" if age is not None else "?"
+        print(f"\n  signals are {shown} min old (> {SIGNALS_FRESH_MIN}) -- "
+              f"re-evaluating on fresh live data...")
+        _run_finder(meta, pause=False)
+    else:
+        print(f"\n  signals are {age:.0f} min old (<= {SIGNALS_FRESH_MIN}) -- using them:")
+        run([PY, "-m", "analysis.signals", "--show"], pause=False)
+
+    if not os.path.exists(SIGNALS):
+        print("\n  no signals to trade -- aborting startup.")
+        input("\n[Enter] ")
+        return
+    ev = ask("\n  min EV per $1 to TRADE (e.g. 0.5)", 0.5)
     print("  (PAPER forward-test of signals.json -- watches live rounds, nothing real")
     print("   is traded; appends paper_trades.csv. Ctrl-C to stop and return.)")
     run([PY, "phase2.py", "--min-ev", ev])

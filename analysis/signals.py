@@ -142,6 +142,36 @@ def _prompt(label, default, cast):
         return default
 
 
+def print_signals(signals):
+    """Render a ranked signal list as the standard table."""
+    win_hdr = "".join(f"{('w'+n):>6}" for n, _ in LOOKBACKS)
+    print(f"\n  {len(signals)} signal(s)  (ranked by EV per $1):")
+    print(f"  {'side':>4} {'entry':>5} {'buy(min)':>9} {'sell':>5} {'shares':>6} "
+          f"{'ROI':>6}{win_hdr} {'EV/$1':>7}")
+    for s in signals:
+        wins = "".join(f"{w:>6.0%}" for w in s["wins"])
+        print(f"  {s['side']:>4} {s['entry']:>5.2f} {s['t1']:>4.2g}-{s['t2']:<4.2g} "
+              f"{s['sell']:>5.2f} {s['shares']:>6.2g} {s['roi']:>+6.0%}{wins} "
+              f"{s['ev']:>+7.2f}")
+
+
+def show_saved():
+    """Print the already-saved signals.json without recomputing (the bot-startup
+    'signals are fresh' path). Returns True if a file was shown."""
+    if not os.path.exists(OUT_JSON):
+        print("  no signals.json yet.")
+        return False
+    with open(OUT_JSON) as f:
+        d = json.load(f)
+    age = (time.time() - d.get("generated", 0)) / 60.0
+    print(f"  signals.json: {len(d.get('signals', []))} signal(s), generated "
+          f"{age:.0f} min ago  |  floors win>= {d.get('min_win', 0):.0%} "
+          f"ROI>= {d.get('min_roi', 0):+.0%}  EV> {d.get('min_ev', 0):+.2f}  "
+          f"entry>= {d.get('min_entry', 0):.2f}")
+    print_signals(d.get("signals", []))
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
     # default=None so we can tell "user passed it" from "not given" and prompt.
@@ -154,7 +184,13 @@ def main():
     ap.add_argument("--min-ev", type=float, default=0.0, dest="min_ev",
                     help="drop signals whose worst-case EV per $1 is <= this "
                          "(default 0 = must be profitable)")
+    ap.add_argument("--show", action="store_true",
+                    help="print the saved signals.json and exit (no recompute)")
     args = ap.parse_args()
+
+    if args.show:
+        show_saved()
+        return
 
     # Prompt for any of the three core thresholds not supplied on the command line.
     if args.min_win is None or args.min_roi is None or args.usd is None:
@@ -201,18 +237,11 @@ def main():
         print("  -> lower --min-win / --min-roi / --min-ev, lower --min-dots, "
               "or collect more data.")
         return
-    win_hdr = "".join(f"{('w'+n):>6}" for n, _ in LOOKBACKS)
-    print(f"\n  {len(signals)} signal(s)  (ranked by EV per $1):")
-    print(f"  {'side':>4} {'entry':>5} {'buy(min)':>9} {'sell':>5} {'shares':>6} "
-          f"{'ROI':>6}{win_hdr} {'EV/$1':>7}")
-    for s in signals:
-        wins = "".join(f"{w:>6.0%}" for w in s["wins"])
-        print(f"  {s['side']:>4} {s['entry']:>5.2f} {s['t1']:>4.2g}-{s['t2']:<4.2g} "
-              f"{s['sell']:>5.2f} {s['shares']:>6.2g} {s['roi']:>+6.0%}{wins} "
-              f"{s['ev']:>+7.2f}")
+    print_signals(signals)
     with open(OUT_JSON, "w") as f:
         json.dump({"generated": now, "min_win": args.min_win, "min_roi": args.min_roi,
-                   "min_ev": args.min_ev, "usd": args.usd, "signals": signals}, f, indent=2)
+                   "min_ev": args.min_ev, "min_entry": args.min_entry,
+                   "usd": args.usd, "signals": signals}, f, indent=2)
     print(f"\n  saved -> {OUT_JSON}  (Phase 2 will consume this after you validate)")
     print("  EV/$1 = worst-case-win x ROI - (1 - worst-case-win); >0 means profitable.")
     print("  CAVEAT: mid-based win-rates -> optimistic vs live fills (adverse selection).")

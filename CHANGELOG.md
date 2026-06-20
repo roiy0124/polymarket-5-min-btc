@@ -16,6 +16,11 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   comparison. Relaxed paper caps so real ~$1-2 bets trade (live `$5` floor reserved for
   `LiveBroker`). `strategy_runner.py` is broker-agnostic — live = swap the broker +
   gate the auto-sell on the CONFIRMED user-WS status. Verified by `exec_engine.phase2_selftest`.
+- **Bot startup (menu 12)** checks signal freshness before trading: if `signals.json`
+  is **≤ 20 min** old it shows the signals (`--show`, no recompute) and you pick the EV
+  floor; if **> 20 min** old (or missing) it **re-evaluates on fresh live data** first —
+  reusing the prior floors automatically — and only then asks for the EV floor. Finder
+  now stores `min_entry` in `signals.json` so re-eval reproduces faithfully.
 
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min
