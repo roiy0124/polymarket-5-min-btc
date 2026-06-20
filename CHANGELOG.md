@@ -3,6 +3,20 @@
 A high-level history of what's been built. Newest first. (Per-commit detail is in
 `git log`; the deep-research findings behind decisions are in the `*.md` docs.)
 
+## Execution — Phase 2 paper executor (`phase2.py`, `exec_engine/strategy_runner.py`)
+- **Live forward-test of the Phase-1 signals — paper-only, nothing real is traded.**
+  Reads `signals.json` and, every 5-min window, trades each signal whose predicted
+  EV clears your floor (`--min-ev`): at the signal's buy-window (`elapsed >= t1·60`)
+  it rests a simulated BUY at the entry price with an auto-sell at the target; cancels
+  if unfilled by `t2`; settles any held position to 1.0/0.0 at resolution. Fills are
+  simulated by the `PaperBroker` (RiskAverse queue model) against the REAL recorded
+  trade stream — the honest, adverse-selection-adjusted, out-of-sample test before any
+  live wiring. Menu option **12**. Appends a per-leg ledger to `paper_trades.csv`
+  (window, fill y/n, exit/settle px, realized PnL, predicted EV) for paper-vs-predicted
+  comparison. Relaxed paper caps so real ~$1-2 bets trade (live `$5` floor reserved for
+  `LiveBroker`). `strategy_runner.py` is broker-agnostic — live = swap the broker +
+  gate the auto-sell on the CONFIRMED user-WS status. Verified by `exec_engine.phase2_selftest`.
+
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min
   win-rate AND min ROI) in ALL THREE lookbacks (**6h / 12h / 24h**). Salvages a line

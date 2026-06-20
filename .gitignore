@@ -12,3 +12,4 @@ exit_maps/
 round_charts/*.png
 round_charts/**/*.png
 signals.json
+paper_trades.csv

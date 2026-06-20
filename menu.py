@@ -127,6 +127,13 @@ def a_signals():
          "--usd", usd, "--min-entry", entry, "--min-ev", ev], env_extra=scope)
 
 
+def a_phase2():
+    ev = ask("min EV per $1 to trade (e.g. 0.5)", 0.5)
+    print("  (PAPER forward-test of signals.json -- watches live rounds, nothing real")
+    print("   is traded; appends paper_trades.csv. Ctrl-C to stop and return.)")
+    run([PY, "phase2.py", "--min-ev", ev])
+
+
 def a_paper():
     o = ask("outcome (up/down)", "down")
     p = ask("entry price", 0.22)
@@ -216,12 +223,13 @@ MENU = [
     ("10", "Reversion screen (dip -> recover)", a_reversion),
     ("11", "Combo EV scan", a_combo_ev),
     ("EXECUTION (paper)", None),
-    ("12", "Paper-trade a limit order", a_paper),
-    ("13", "Execution engine self-test", a_selftest),
+    ("12", "PHASE 2 -- paper executor (live forward-test of signals.json)", a_phase2),
+    ("13", "Paper-trade a single limit order", a_paper),
+    ("14", "Execution engine self-test", a_selftest),
     ("SERVICES", None),
-    ("14", "Start collectors", a_start),
-    ("15", "Stop collectors", a_stop),
-    ("16", "Create NEW database (archive current -> old_dbs/)", a_new_database),
+    ("15", "Start collectors", a_start),
+    ("16", "Stop collectors", a_stop),
+    ("17", "Create NEW database (archive current -> old_dbs/)", a_new_database),
 ]
 ACTIONS = {row[0]: row[2] for row in MENU if row[1] is not None}
 
