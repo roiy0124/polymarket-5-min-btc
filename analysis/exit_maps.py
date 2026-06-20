@@ -18,6 +18,7 @@ y is the best MID (a mild upper bound; real sells hit the bid). Exploratory only
 """
 
 import os
+import math
 import bisect
 
 import matplotlib
@@ -30,10 +31,25 @@ WINDOW = 300.0
 SELL_THRESHOLD = 0.01   # the price must clear entry by this much to count as a real exit
 EXEC_DELAY_SEC = 0.4    # signal->execution latency: ignore price action this soon after entry
 BUY_WIN_MIN_WIDTH = 0.5   # minutes; the best buy-time window must be >= this (30s)
-BUY_WIN_MIN_DOTS = 8      # require this many entries in a window to trust it
+BUY_WIN_MIN_DOTS = 10     # absolute floor: this many entries in a window to consider it
+BUY_WIN_MIN_FRAC = 0.20   # AND the window must hold this share of the price's dots
 BUY_WIN_STEP = 0.25       # minutes; grid for scanning window boundaries
+WILSON_Z = 1.0            # confidence multiplier for the win-rate lower bound (~84% one-sided)
 OUTDIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "exit_maps")
+
+
+def wilson_lb(k, n, z=WILSON_Z):
+    """Lower bound of the Wilson score interval for a win-rate of k/n. Shrinks a
+    high rate toward 0 when n is small, so a great-looking line on few dots scores
+    much lower than the same rate on many dots. Returns 0 for n=0."""
+    if n <= 0:
+        return 0.0
+    p = k / n
+    denom = 1.0 + z * z / n
+    centre = p + z * z / (2.0 * n)
+    margin = z * math.sqrt((p * (1.0 - p) + z * z / (4.0 * n)) / n)
+    return max(0.0, (centre - margin) / denom)
 
 
 def load_windows(conn):
@@ -87,12 +103,18 @@ def entry_and_exit(path, cent, won):
 def best_sell_window(dots, z):
     """Best (entry-time window >= BUY_WIN_MIN_WIDTH, single SELL price T) for buying
     at price z. A dot AT/ABOVE T is a WIN (the price reached your limit sell -> you
-    sold at T); a dot UNDER T is a loss (never reached it). Chosen to maximize the
-    SWEET SPOT  win_rate x ROI  -- balancing how OFTEN you reach the sell (win rate)
-    against how MUCH you make (ROI = (T - z)/z). Returns
-    (t1, t2, sell_T, win_rate, roi, ev, n) or None, where ev = win_rate * roi."""
-    if len(dots) < BUY_WIN_MIN_DOTS:
+    sold at T); a dot UNDER T is a loss (never reached it).
+
+    Anti-cherry-pick: a window must hold a real SHARE of the price's dots (>=
+    BUY_WIN_MIN_FRAC) AND an absolute floor (BUY_WIN_MIN_DOTS) -- a line on a thin
+    sliver isn't statistically real. Ranked by a SAMPLE-AWARE EV that uses the
+    Wilson lower bound of the win rate, so a dense window beats a thin one at the
+    same observed rate. Returns (t1, t2, sell_T, win_rate, roi, ev_adj, n) or None,
+    where win_rate is the OBSERVED rate and ev_adj = wlb*roi - (1 - wlb)."""
+    total = len(dots)
+    if total < BUY_WIN_MIN_DOTS:
         return None
+    min_dots = max(BUY_WIN_MIN_DOTS, int(math.ceil(BUY_WIN_MIN_FRAC * total)))
     grid = [round(i * BUY_WIN_STEP, 2) for i in range(int(5 / BUY_WIN_STEP) + 1)]
     best = None
     for a in range(len(grid)):
@@ -102,7 +124,7 @@ def best_sell_window(dots, z):
                 continue
             ys = sorted(d[1] for d in dots if t1 <= d[0] <= t2)
             n = len(ys)
-            if n < BUY_WIN_MIN_DOTS:
+            if n < min_dots:                          # density gate (dots AND share)
                 continue
             for T in sorted(set(ys)):
                 if T <= z + 1e-9:
@@ -110,8 +132,9 @@ def best_sell_window(dots, z):
                 reach = n - bisect.bisect_left(ys, T - 1e-9)   # dots with y >= T
                 win_rate = reach / n
                 roi = (T - z) / z
-                ev = win_rate * roi
-                key = (round(ev, 6), win_rate, t2 - t1)
+                wlb = wilson_lb(reach, n)
+                ev = wlb * roi - (1.0 - wlb)          # confidence-adjusted EV per $1
+                key = (round(ev, 6), wlb, t2 - t1)
                 if best is None or key > best[0]:
                     best = (key, t1, t2, T, win_rate, roi, ev, n)
     if best is None:
@@ -155,7 +178,7 @@ def make_plot(side, cent, dots, outpath):
                 clip_on=False)
         ax.text(0.02, 0.035,
                 f"BUY {t1:.2g}-{t2:.2g}min  sell {sell_T:.2f}  win {wr:.0%}  "
-                f"ROI {roi:+.0%}  (EV {ev:+.0%}, n={n})",
+                f"ROI {roi:+.0%}  (n={n}, EVadj {ev:+.2f})",
                 transform=ax.transAxes, fontsize=7.5, color="#5a32a3", weight="bold",
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#8957e5", alpha=0.92))
 

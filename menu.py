@@ -135,8 +135,10 @@ def a_signals():
     usd = ask("bet USD per trade", 2)
     entry = ask("min entry price", 0.10)
     ev = ask("min EV per $1 (0 = must be profitable)", 0.0)
+    frac = ask("min window dot-share (0.20 = 20%, anti-cherry-pick)", 0.20)
     run([PY, "-m", "analysis.signals", "--min-win", win, "--min-roi", roi,
-         "--usd", usd, "--min-entry", entry, "--min-ev", ev], env_extra=scope)
+         "--usd", usd, "--min-entry", entry, "--min-ev", ev, "--min-frac", frac],
+        env_extra=scope)
 
 
 def _signals_meta():
@@ -155,16 +157,19 @@ def _run_finder(meta, scope=None, pause=False):
         win, roi = meta.get("min_win", 0.70), meta.get("min_roi", 0.50)
         usd, entry = meta.get("usd", 2), meta.get("min_entry", 0.10)
         fev = meta.get("min_ev", 0.0)
+        dots, frac = meta.get("min_dots", 8), meta.get("min_frac", 0.20)
         print(f"  reusing prior floors: win>= {float(win):.0%}  ROI>= {float(roi):+.0%}"
-              f"  EV> {fev}  bet ${usd}  entry>= {entry}")
+              f"  EV> {fev}  density>= {dots} & {float(frac):.0%}  bet ${usd}  entry>= {entry}")
     else:
         win = ask("min win-rate (e.g. 0.70)", 0.70)
         roi = ask("min ROI (e.g. 0.50)", 0.50)
         usd = ask("bet USD per trade", 2)
         entry = ask("min entry price", 0.10)
         fev = ask("finder min EV per $1 (0 = must be profitable)", 0.0)
+        dots, frac = 8, ask("min window dot-share (0.20 = 20%)", 0.20)
     run([PY, "-m", "analysis.signals", "--min-win", win, "--min-roi", roi,
-         "--usd", usd, "--min-entry", entry, "--min-ev", fev], pause=pause, env_extra=scope)
+         "--usd", usd, "--min-entry", entry, "--min-ev", fev, "--min-dots", dots,
+         "--min-frac", frac], pause=pause, env_extra=scope)
 
 
 def a_phase2():

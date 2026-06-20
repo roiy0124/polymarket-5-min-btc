@@ -47,6 +47,20 @@ A high-level history of what's been built. Newest first. (Per-commit detail is i
   lines are drawn (blue = up, brown = down) and order markers are shaped by side (circle =
   up order, square = down order).
 
+## Anti-cherry-pick: statistical lines, not lucky slivers (`signals.py`, `exit_maps.py`)
+- A buy-window used to qualify on as few as 5–8 dots, so the finder could place a high-ROI
+  line on a thin sliver of entry-times where a handful of rounds happened to win — anecdote,
+  not evidence. Two fixes, applied to **both** the finder and the exit-map overlay:
+  1. **Density gate** — a window must hold an absolute floor of dots (`--min-dots`, now 8)
+     AND a real **share** of the price's dots (`--min-frac`, default 20%). The classic
+     example (entry 34c) had its line on an 8/70 = 11% window; it's now rejected and the
+     line sits on a dense 26-dot window instead.
+  2. **Confidence-adjusted EV** — ranking uses the **Wilson lower bound** of the win-rate,
+     not the raw rate, so a 62% win on 8 dots scores far below the same rate on 40. Dense,
+     trustworthy windows win. The `wins` columns still show the observed rates; the new `n`
+     column shows the (thinnest-lookback) sample size. NOTE: EVs are now lower (conservative)
+     — adjust `--min-ev` floors down accordingly.
+
 ## Execution — Phase 1 signal finder (`analysis/signals.py`)
 - Finds limit-order signals from the exit-map data that clear user floors (min
   win-rate AND min ROI) in ALL THREE lookbacks (**6h / 12h / 24h**). Salvages a line

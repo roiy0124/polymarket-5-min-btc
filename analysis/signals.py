@@ -36,7 +36,8 @@ import bisect
 import argparse
 
 from . import panel
-from .exit_maps import entry_and_exit, WINDOW, BUY_WIN_MIN_WIDTH, BUY_WIN_STEP
+from .exit_maps import (entry_and_exit, wilson_lb, WINDOW, BUY_WIN_MIN_WIDTH,
+                        BUY_WIN_STEP)
 
 LOOKBACKS = [("6h", 6 * 3600), ("12h", 12 * 3600), ("24h", 24 * 3600)]
 OUT_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -75,12 +76,20 @@ def dots_for(windows, side, cent):
     return res
 
 
-def find_signal(dots, z, cuts, min_win, min_roi, min_dots):
-    """Best (buy-window>=30s, sell T) clearing both floors in all lookbacks."""
+def find_signal(dots, z, cuts, min_win, min_roi, min_dots, min_frac):
+    """Best (buy-window>=30s, sell T) clearing both floors in all lookbacks.
+
+    Anti-cherry-pick: a window must hold an absolute floor of dots (min_dots) AND a
+    real SHARE of the price's dots in each lookback (min_frac) -- a line on a thin
+    sliver of entry-times isn't statistically real. The score is a SAMPLE-AWARE EV
+    that uses the Wilson lower bound of the worst-case win rate, so a dense window
+    beats a thin one at the same observed rate. `wins` reports the OBSERVED rates."""
     t_floor = z * (1 + min_roi)
     cand_T = sorted({d[1] for d in dots if d[1] >= t_floor - 1e-9})
     if not cand_T:
         return None
+    # total dots for this price within each lookback (the denominator for the share)
+    totals = [sum(1 for d in dots if d[2] >= cut) for _, cut in cuts]
     grid = [round(i * BUY_WIN_STEP, 2) for i in range(int(5 / BUY_WIN_STEP) + 1)]
     best = None
     for a in range(len(grid)):
@@ -91,9 +100,11 @@ def find_signal(dots, z, cuts, min_win, min_roi, min_dots):
             in_win = [d for d in dots if t1 <= d[0] <= t2]
             subs = []
             ok = True
-            for _, cut in cuts:
+            for (_, cut), tot in zip(cuts, totals):
                 sy = sorted(d[1] for d in in_win if d[2] >= cut)
-                if len(sy) < min_dots:
+                # density gate: enough dots in absolute terms AND a real share of
+                # the map for this entry price (not a thin cherry-picked sliver)
+                if len(sy) < min_dots or (tot > 0 and len(sy) < min_frac * tot):
                     ok = False
                     break
                 subs.append(sy)
@@ -101,29 +112,32 @@ def find_signal(dots, z, cuts, min_win, min_roi, min_dots):
                 continue
             for T in cand_T:
                 roi = (T - z) / z
-                reaches = []
+                reaches, lbs = [], []
                 good = True
                 for sy in subs:
-                    r = len(sy) - bisect.bisect_left(sy, T - 1e-9)
-                    wr = r / len(sy)
+                    n = len(sy)
+                    r = n - bisect.bisect_left(sy, T - 1e-9)
+                    wr = r / n
                     if wr < min_win:
                         good = False
                         break
                     reaches.append(wr)
+                    lbs.append(wilson_lb(r, n))     # sample-size-honest win rate
                 if not good:
                     continue
-                wr_min = min(reaches)
-                # expected value per $1 staked: a win pays +roi, a miss loses the
-                # whole stake (a dot under the sell line settles toward 0).
-                ev = wr_min * roi - (1.0 - wr_min)
-                key = (round(ev, 6), round(wr_min, 4), t2 - t1)
+                wlb = min(lbs)
+                # EV per $1 staked on the CONSERVATIVE win estimate: a win pays +roi,
+                # a miss loses the whole stake (a dot under the sell settles to 0).
+                ev = wlb * roi - (1.0 - wlb)
+                n_min = min(len(sy) for sy in subs)
+                key = (round(ev, 6), round(wlb, 4), t2 - t1)
                 if best is None or key > best[0]:
-                    best = (key, t1, t2, T, reaches, roi, ev)
+                    best = (key, t1, t2, T, reaches, roi, ev, n_min)
     if best is None:
         return None
-    _, t1, t2, T, reaches, roi, ev = best
+    _, t1, t2, T, reaches, roi, ev, n_min = best
     return {"t1": t1, "t2": t2, "sell": round(T, 3), "roi": roi,
-            "wins": [round(r, 4) for r in reaches], "ev": ev}
+            "wins": [round(r, 4) for r in reaches], "ev": ev, "n": n_min}
 
 
 def _prompt(label, default, cast):
@@ -143,16 +157,17 @@ def _prompt(label, default, cast):
 
 
 def print_signals(signals):
-    """Render a ranked signal list as the standard table."""
+    """Render a ranked signal list as the standard table. `n` is the sample size
+    (dots) in the buy-window's thinnest lookback; EV is confidence-adjusted."""
     win_hdr = "".join(f"{('w'+n):>6}" for n, _ in LOOKBACKS)
-    print(f"\n  {len(signals)} signal(s)  (ranked by EV per $1):")
+    print(f"\n  {len(signals)} signal(s)  (ranked by confidence-adjusted EV per $1):")
     print(f"  {'side':>4} {'entry':>5} {'buy(min)':>9} {'sell':>5} {'shares':>6} "
-          f"{'ROI':>6}{win_hdr} {'EV/$1':>7}")
+          f"{'n':>4} {'ROI':>6}{win_hdr} {'EV/$1':>7}")
     for s in signals:
         wins = "".join(f"{w:>6.0%}" for w in s["wins"])
         print(f"  {s['side']:>4} {s['entry']:>5.2f} {s['t1']:>4.2g}-{s['t2']:<4.2g} "
-              f"{s['sell']:>5.2f} {s['shares']:>6.2g} {s['roi']:>+6.0%}{wins} "
-              f"{s['ev']:>+7.2f}")
+              f"{s['sell']:>5.2f} {s['shares']:>6.2g} {str(s.get('n', '-')):>4} "
+              f"{s['roi']:>+6.0%}{wins} {s['ev']:>+7.2f}")
 
 
 def show_saved():
@@ -167,6 +182,7 @@ def show_saved():
     print(f"  signals.json: {len(d.get('signals', []))} signal(s), generated "
           f"{age:.0f} min ago  |  floors win>= {d.get('min_win', 0):.0%} "
           f"ROI>= {d.get('min_roi', 0):+.0%}  EV> {d.get('min_ev', 0):+.2f}  "
+          f"density>= {d.get('min_dots', '?')} & {d.get('min_frac', 0):.0%}  "
           f"entry>= {d.get('min_entry', 0):.2f}")
     print_signals(d.get("signals", []))
     return True
@@ -178,7 +194,11 @@ def main():
     ap.add_argument("--min-win", type=float, default=None, dest="min_win")
     ap.add_argument("--min-roi", type=float, default=None, dest="min_roi")
     ap.add_argument("--usd", type=float, default=None)
-    ap.add_argument("--min-dots", type=int, default=5, dest="min_dots")
+    ap.add_argument("--min-dots", type=int, default=8, dest="min_dots",
+                    help="absolute floor of dots a buy-window must contain")
+    ap.add_argument("--min-frac", type=float, default=0.20, dest="min_frac",
+                    help="a buy-window must also hold this share of the price's dots "
+                         "(anti-cherry-pick; 0.20 = 20%%)")
     ap.add_argument("--min-entry", type=float, default=0.10, dest="min_entry",
                     help="skip entry prices below this (drops illiquid penny tokens)")
     ap.add_argument("--min-ev", type=float, default=0.0, dest="min_ev",
@@ -216,8 +236,9 @@ def main():
     conn.close()
 
     print(f"Signal finder  |  floors: win>= {args.min_win:.0%}  ROI>= {args.min_roi:+.0%}"
-          f"  EV> {args.min_ev:+.2f}  |  bet ${args.usd:g}  |  entry>= {args.min_entry:.2f}"
-          f"  |  robust across {lbnames}  |  {len(windows)} windows")
+          f"  EV> {args.min_ev:+.2f}  |  density: >= {args.min_dots} dots & "
+          f">= {args.min_frac:.0%} of the price's dots  |  bet ${args.usd:g}  "
+          f"entry>= {args.min_entry:.2f}  |  robust across {lbnames}  |  {len(windows)} windows")
 
     lo = max(1, int(round(args.min_entry * 100)))
     signals = []
@@ -225,7 +246,8 @@ def main():
         for cent in range(lo, 50):     # entry in [min_entry, 0.50)
             z = cent / 100.0
             d = dots_for(windows, side, cent)
-            sig = find_signal(d, z, cuts, args.min_win, args.min_roi, args.min_dots)
+            sig = find_signal(d, z, cuts, args.min_win, args.min_roi,
+                              args.min_dots, args.min_frac)
             if sig and sig["ev"] > args.min_ev:     # must clear the EV floor
                 sig.update({"side": side, "entry": z,
                             "shares": round(args.usd / z, 2)})
@@ -241,6 +263,7 @@ def main():
     with open(OUT_JSON, "w") as f:
         json.dump({"generated": now, "min_win": args.min_win, "min_roi": args.min_roi,
                    "min_ev": args.min_ev, "min_entry": args.min_entry,
+                   "min_dots": args.min_dots, "min_frac": args.min_frac,
                    "usd": args.usd, "signals": signals}, f, indent=2)
     print(f"\n  saved -> {OUT_JSON}  (Phase 2 will consume this after you validate)")
     print("  EV/$1 = worst-case-win x ROI - (1 - worst-case-win); >0 means profitable.")
