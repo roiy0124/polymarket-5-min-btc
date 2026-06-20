@@ -77,19 +77,23 @@ Generate: `python -m analysis.exit_maps` (read-only — no need to stop the coll
   DOWN chart, red dots are the Down-token winners → they rise to ~1.0.)
 - **lines**: dashed at y=z (entry), dotted at y=2z.
 
-**Best buy-window + sell-target overlay** (added): each chart finds the
-**sweet spot** — the contiguous **entry-time window (≥30s)** *and* the single
-**limit-sell price `T`** that together maximize **win-rate × ROI**. It shades the
-window, draws a horizontal **sell line at `T`** (dots **at/above** it = wins, you
-sold at `T`; dots **under** it = losses, never reached your sell), prints the
-**sell price in the right margin** (outside the plot), and labels the left with
-`BUY t1-t2min · sell T · win% · ROI% · (EV%)`, where:
-- **win-rate** = fraction of that window's entries whose price reached `T`,
+**Best buy-window + sell-target overlay**: each chart finds the contiguous
+**entry-time window (≥30s)** *and* the single **limit-sell price `T`** that maximize
+a **confidence-adjusted EV**. It shades the window, draws a horizontal **sell line at
+`T`** (dots **at/above** it = wins, you sold at `T`; dots **under** it = losses,
+never reached your sell), prints the **sell price in the right margin**, and labels
+the left with `BUY t1-t2min · sell T · win% · ROI% · (n, EVadj)`, where:
+- **win-rate** = fraction of that window's entries whose price reached `T` (observed),
 - **ROI** = `(T − z)/z` (your gain when it fills),
-- **EV** = `win-rate × ROI` (the quantity maximized — the win-rate/ROI sweet spot).
+- **EVadj** = `wlb·ROI − (1 − wlb)` per $1 staked, where `wlb` is the **Wilson lower
+  bound** of the win-rate. A miss loses the whole stake (a dot under the sell settles
+  toward 0), and the Wilson bound shrinks a high rate toward 0 when `n` is small — so
+  a great-looking line on few dots scores far below the same rate on many dots.
+- **n** = the window's sample size, shown so you never trust a thin line blind.
 
-Tunables at the top of `exit_maps.py`: `BUY_WIN_MIN_WIDTH` (min 30s), `BUY_WIN_MIN_DOTS`
-(sample floor to avoid small-n flukes). Raise the latter for more robust windows.
+See **Line-selection thresholds** below for the density gate that stops the search
+from cherry-picking thin slivers. Tunables at the top of `exit_maps.py`:
+`BUY_WIN_MIN_WIDTH` (30s), `BUY_WIN_MIN_DOTS`, `BUY_WIN_MIN_FRAC`, `WILSON_Z`.
 
 **How to read them:**
 - A **floor of dots at 0** → complete losses (entered, never got a sellable bounce,
@@ -101,6 +105,54 @@ Tunables at the top of `exit_maps.py`: `BUY_WIN_MIN_WIDTH` (min 30s), `BUY_WIN_M
   a candidate rule to quantify in step 3.
 - Tunables at the top of `exit_maps.py`: `SELL_THRESHOLD` (min bounce to count as a
   sellable exit) and `EXEC_DELAY_SEC` (signal→execution latency).
+
+## From maps to signals — Phase 1 finder → Phase 2 paper test
+The maps are exploration; these turn a chosen rule into a measured one.
+- **Phase 1 — `signals.py`** (`python -m analysis.signals`, menu 7): the same
+  window/sell search as the overlay, run across every entry price, kept only if it
+  clears your floors (min win, min ROI, min EVadj) **in all three lookbacks (6h/12h/
+  24h)**. Ranked by the confidence-adjusted EVadj. Writes `signals.json`. Read-only.
+- **Phase 2 — `phase2.py`** (menu 12): the honest, out-of-sample forward test. Every
+  live 5-min round it rests a simulated BUY at each signal's entry/window, auto-sells
+  at `T` on fill, and settles held positions 0/1 at resolution — fills simulated by
+  the `PaperBroker` (RiskAverse queue) against the **real recorded trade stream**.
+  Nothing real trades. Logs a per-leg ledger (`paper_trades.csv`).
+- **Ledger — `paper_ledger.py`** (menu 13): realized vs predicted EV, fill rate,
+  per-signal. The **EVfill − EVpred gap is the adverse-selection cost** the mid-price
+  backtest can't see. Pre-committed go/no-go: a signal earns live wiring only if its
+  paper EV stays positive and near prediction out-of-sample.
+- **Round reviews — `round_review.py`** (menu 14): per-round charts of what the paper
+  executor did (entry fills, target, best-sell-reachable, BTC + strike). Makes the
+  adverse-selection story visible (entries riding the wrong way, targets unreached).
+
+**First paper finding (n=2, not a verdict):** on trending rounds the side that *fills*
+is the side that *loses* — your limit only fills when the move is going against you.
+Real mechanism, exactly the adverse-selection risk; needs many more (esp. choppy)
+rounds, and likely a regime / toxic-flow filter ([[btc-updown-meanrev-assessment]]).
+
+## Line-selection thresholds — the anti-cherry-pick problem
+Scanning many (window, sell-price) candidates and keeping the best is a
+**selection-bias / multiple-comparisons** trap: the winner's in-sample numbers are
+upward-biased, and the search gravitates to **thin slivers** where a few rounds
+happened to win. Two current guards (in both `exit_maps.py` and `signals.py`):
+1. **Density gate** — a window must hold an absolute floor of dots (`min_dots`) AND a
+   real **share** of the price's dots (`min_frac`, default 20%). Stops a line landing
+   on an 8-dot sliver of a 95-dot map.
+2. **Confidence-adjusted EV (Wilson lower bound)** — ranks by `wlb·ROI − (1−wlb)`, so
+   small-n windows are demoted vs dense ones at the same observed rate.
+
+**KNOWN LIMITATION (open):** both thresholds are **fixed**, which is crude. A fixed
+`min_dots` can't say "11 dots is fine for a sparse map but noise against a map whose
+median window holds ~95" (e.g. `entry@99c`, n=11, ROI +1% — pure noise). And `min_frac`
+is genuinely hard to set — the right density is case-sensitive. The thresholds *should
+be adaptive* — proportional to each map's data and grounded in statistical power /
+support theory, not arbitrary constants. **A deep-research pass on adaptive sample-size
+and density/support thresholds (plus multiple-comparisons and out-of-sample guards) is
+underway; the recommendation will replace the fixed knobs.** Candidate directions to
+evaluate: minimum-n from a target CI half-width / power to distinguish 65% from 50%;
+support set relative to the map's median/percentile; empirical-Bayes shrinkage of the
+win-rate toward the base rate; FDR / deflated-metric correction for the search; and a
+train/validation split so the chosen line must survive out-of-sample.
 
 ## Per-round charts (ground-truth viewer) — `round_charts/`
 `chart_capture.py` (a supervised service; backfill with `python chart_capture.py --once`)
