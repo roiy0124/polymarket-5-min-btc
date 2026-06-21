@@ -24,3 +24,5 @@ live_runner.log
 KILL
 round_reviews/*.png
 *.bak
+spike_reversion.png
+*.out
