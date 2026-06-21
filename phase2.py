@@ -35,7 +35,7 @@ SIGNALS = os.path.join(HERE, "signals.json")
 LEDGER = os.path.join(HERE, "paper_trades.csv")
 FIELDS = ["window_start", "side", "entry_z", "buy_filled", "fill_px", "sell_T",
           "sell_filled", "exit_or_settle_px", "realized_pnl", "ev_predicted",
-          "won", "shares", "bought", "sold"]
+          "won", "shares", "bought", "sold", "sig_gen"]
 
 
 def log(msg):
@@ -108,6 +108,7 @@ def main():
     with open(args.signals) as f:
         data = json.load(f)
     signals = data.get("signals", [])
+    sig_gen = data.get("generated")   # stamp every leg so the ledger can split epochs
     if not os.path.exists(DB_PATH):
         print(f"DB not found at {DB_PATH} — start the collectors first.")
         return
@@ -168,6 +169,8 @@ def main():
                 if outcome in ("Up", "Down"):
                     rows = runner.settle_window(ws, outcome)
                     if rows:
+                        for r in rows:
+                            r["sig_gen"] = sig_gen
                         append_ledger(rows)
                         for r in rows:
                             tot_pnl += r["realized_pnl"]

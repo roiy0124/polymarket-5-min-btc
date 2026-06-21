@@ -26,7 +26,6 @@ SIGNALS = os.path.join(HERE, "signals.json")
 OLD_DBS = os.path.join(HERE, "old_dbs")
 STOP = os.path.join(HERE, "STOP")
 DASH = "http://127.0.0.1:8765"
-SIGNALS_FRESH_MIN = 20      # bot startup: re-evaluate signals older than this
 
 
 def run(cmd, pause=True, env_extra=None):
@@ -173,24 +172,18 @@ def _run_finder(meta, scope=None, pause=False):
 
 
 def a_phase2():
-    """Bot startup: ensure signals are fresh (<=20 min) -- showing them if so,
-    re-evaluating on live data if not -- then choose the EV floor and launch the
-    paper executor."""
+    """Bot startup: ALWAYS re-run the signal finder first so the executor (and the
+    live bot, when wired) trades the freshest signals from current data -- never a
+    stale signals.json -- then choose the EV floor and launch the paper executor."""
     meta = _signals_meta()
-    gen = meta.get("generated") if meta else None
-    age = (time.time() - gen) / 60.0 if gen else None
-
-    if meta is None or age is None or age > SIGNALS_FRESH_MIN:
-        if meta is None:
-            print("\n  no signals.json yet -- generating fresh signals first.")
-        else:
-            shown = f"{age:.0f}" if age is not None else "?"
-            print(f"\n  signals are {shown} min old (> {SIGNALS_FRESH_MIN}) -- re-evaluating...")
-        scope = ask_scope(unit="hours")     # which data window to build signals from
-        _run_finder(meta, scope, pause=False)
+    if meta is None:
+        print("\n  no signals.json yet -- generating fresh signals first.")
     else:
-        print(f"\n  signals are {age:.0f} min old (<= {SIGNALS_FRESH_MIN}) -- using them:")
-        run([PY, "-m", "analysis.signals", "--show"], pause=False)
+        age = (time.time() - meta.get("generated", 0)) / 60.0
+        print(f"\n  refreshing signals before launch (current set is {age:.0f} min old) "
+              f"-- re-running the finder...")
+    scope = ask_scope(unit="hours")     # which data window to build signals from
+    _run_finder(meta, scope, pause=False)
 
     if not os.path.exists(SIGNALS):
         print("\n  no signals to trade -- aborting startup.")
