@@ -172,32 +172,22 @@ def _run_finder(meta, scope=None, pause=False):
 
 
 def a_phase2():
-    """Bot startup: ALWAYS re-run the signal finder first so the executor (and the
-    live bot, when wired) trades the freshest signals from current data -- never a
-    stale signals.json -- then choose the EV floor and launch the paper executor."""
-    meta = _signals_meta()
-    if meta is None:
-        print("\n  no signals.json yet -- generating fresh signals first.")
-    else:
-        age = (time.time() - meta.get("generated", 0)) / 60.0
-        print(f"\n  refreshing signals before launch (current set is {age:.0f} min old) "
-              f"-- re-running the finder...")
-    scope = ask_scope(unit="hours")     # which data window to build signals from
-    _run_finder(meta, scope, pause=False)
-
-    if not os.path.exists(SIGNALS):
-        print("\n  no signals to trade -- aborting startup.")
-        input("\n[Enter] ")
-        return
-    ev = ask("\n  min EV per $1 to TRADE (e.g. 0.5)", 0.5)
-    print("  (PAPER forward-test of signals.json -- watches live rounds, nothing real")
-    print("   is traded; appends paper_trades.csv. Ctrl-C to stop and return.)")
-    run([PY, "phase2.py", "--min-ev", ev])
+    """Launch the NESTED paper executor (phase2_nested.py). It re-fits the nested
+    gap->time signals (combo 24/16/8) every 30 min and forward-tests them in paper.
+    It generates its own signals, so no signals.json / EV-floor prompt is needed."""
+    if not is_live():
+        print("\n  NOTE: collectors don't look live -- the executor needs live "
+              "trades/books + window resolutions.")
+        print("  Start them (option 17) first, or it will just idle.")
+    print("\n  (PAPER forward-test of the NESTED strategy -- nothing real is traded;")
+    print("   re-fits every 30 min; appends paper_nested_trades.csv. Ctrl-C to stop.)")
+    run([PY, "phase2_nested.py"])
 
 
 def a_paper_ledger():
     n = ask("min attempts per signal to show", 1)
-    run([PY, "-m", "analysis.paper_ledger", "--min-n", n])
+    run([PY, "-m", "analysis.paper_ledger", "--ledger", "paper_nested_trades.csv",
+         "--min-n", n])
 
 
 def a_round_review():
@@ -294,8 +284,8 @@ MENU = [
     ("10", "Reversion screen (dip -> recover)", a_reversion),
     ("11", "Combo EV scan", a_combo_ev),
     ("EXECUTION (paper)", None),
-    ("12", "PHASE 2 -- paper executor (live forward-test of signals.json)", a_phase2),
-    ("13", "Paper ledger summary (realized vs predicted EV)", a_paper_ledger),
+    ("12", "PHASE 2 -- NESTED paper executor (gap->time, refits 30min)", a_phase2),
+    ("13", "Paper ledger summary (NESTED: paper_nested_trades.csv)", a_paper_ledger),
     ("14", "Round reviews (per-round charts of paper games)", a_round_review),
     ("15", "Paper-trade a single limit order", a_paper),
     ("16", "Execution engine self-test", a_selftest),
