@@ -15,7 +15,12 @@ signals.json
 signals_history.jsonl
 paper_trades.csv
 live_trades.csv
+experiment_trades.csv
+experiment_run.log
+walkforward_trades.csv
+config_sweep.csv
 live_runner.log
 .env
 KILL
 round_reviews/*.png
+*.bak

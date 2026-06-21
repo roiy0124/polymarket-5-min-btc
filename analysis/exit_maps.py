@@ -84,22 +84,26 @@ def map_admit_threshold(totals):
 
 
 def load_windows(conn):
-    """Per settled window: outcome + chronological (elapsed_min, mid) for each side."""
+    """Per settled window: outcome + chronological (elapsed_min, mid, btc_margin) for
+    each side. btc_margin = BTC price - strike at that snapshot ($; None if missing).
+    The 3rd tuple element powers the margin-correlation maps; entry_and_exit ignores
+    it (positional access), so signal-finder paths that are plain (x, mid) still work."""
     out = []
-    for ws, outcome in conn.execute(
-            "SELECT window_start, resolved_outcome FROM windows "
+    for ws, outcome, strike in conn.execute(
+            "SELECT window_start, resolved_outcome, strike_binance FROM windows "
             "WHERE resolved_outcome IN ('Up','Down') ORDER BY window_start"):
         rows = conn.execute(
-            "SELECT time_left, up_mid, down_mid FROM snapshots WHERE window_start=? "
-            "AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
+            "SELECT time_left, up_mid, down_mid, btc_binance FROM snapshots "
+            "WHERE window_start=? AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
         if not rows:
             continue
         up, dn = [], []
-        for tl, um, dm in rows:
+        for tl, um, dm, btc in rows:
             elapsed_min = max(0.0, (WINDOW - tl) / 60.0)
-            up.append((elapsed_min, um))
+            margin = (btc - strike) if (btc is not None and strike is not None) else None
+            up.append((elapsed_min, um, margin))
             if dm is not None:
-                dn.append((elapsed_min, dm))
+                dn.append((elapsed_min, dm, margin))
         out.append({"outcome": outcome, "up": up, "down": dn})
     return out
 
@@ -114,21 +118,30 @@ def entry_and_exit(path, cent, won):
     floor into a uniform 1c bucket [cent, cent+1) -- NOT round(), whose banker's
     rounding (.5 -> even) leaves odd-cent charts artificially empty."""
     idx = None
-    for i, (_, mid) in enumerate(path):
-        if int(mid * 100 + 1e-6) == cent:
+    for i, row in enumerate(path):                 # positional: works for (x,mid) or (x,mid,margin)
+        if int(row[1] * 100 + 1e-6) == cent:
             idx = i
             break
     if idx is None:
         return None
-    entry_x, entry_p = path[idx]
+    entry_x, entry_p = path[idx][0], path[idx][1]
     # only look for an exit AFTER the signal->execution latency (you can't react
     # to price action in the first EXEC_DELAY_SEC after the entry signal fires)
     delay_min = EXEC_DELAY_SEC / 60.0
-    after = [mid for x, mid in path[idx + 1:] if x >= entry_x + delay_min]
+    after = [r[1] for r in path[idx + 1:] if r[0] >= entry_x + delay_min]
     best_after = max(after) if after else entry_p
     if best_after >= entry_p + SELL_THRESHOLD:
         return entry_x, best_after            # a real bounce you could sell into
     return entry_x, (1.0 if won else 0.0)     # no exit -> resolution (0 = loss)
+
+
+def entry_margin(path, cent):
+    """BTC margin-from-strike ($) at the moment the token first hit `cent`. Needs a
+    margin-augmented path (load_windows); returns None if absent."""
+    for row in path:
+        if int(row[1] * 100 + 1e-6) == cent:
+            return row[2] if len(row) > 2 else None
+    return None
 
 
 def best_sell_window(dots, z):
@@ -228,23 +241,134 @@ def make_plot(side, cent, dots, outpath, admit=True):
     plt.close(fig)
 
 
+def _gap_zones(ms, ys, sell_T, breakeven, k, ngrid=60):
+    """Gap range(s) where the LOCAL win-rate of reaching sell_T (k nearest gaps) beats
+    breakeven. ms/ys are gap/exit sorted by gap. Returns [(lo,hi), ...]."""
+    n = len(ms)
+    lo_m, hi_m = ms[0], ms[-1]
+    if hi_m <= lo_m:
+        return []
+    grid = [lo_m + (hi_m - lo_m) * i / (ngrid - 1) for i in range(ngrid)]
+    zones, run_lo = [], None
+    for gxv in grid:
+        pos = bisect.bisect_left(ms, gxv)
+        l, r, cnt, reach = pos - 1, pos, 0, 0
+        while cnt < k and (l >= 0 or r < n):
+            if r >= n or (l >= 0 and gxv - ms[l] <= ms[r] - gxv):
+                reach += ys[l] >= sell_T - 1e-9
+                l -= 1
+            else:
+                reach += ys[r] >= sell_T - 1e-9
+                r += 1
+            cnt += 1
+        ok = cnt > 0 and (reach / cnt) > breakeven
+        if ok and run_lo is None:
+            run_lo = gxv
+        elif not ok and run_lo is not None:
+            zones.append((run_lo, prev))
+            run_lo = None
+        prev = gxv
+    if run_lo is not None:
+        zones.append((run_lo, grid[-1]))
+    return zones
+
+
+def best_conditional(mdots, z, min_n=30):
+    """Jointly pick the sell target T and the gap BUY-zone(s) maximizing a SAMPLE-AWARE
+    conditional EV: ev_adj = wlb*roi - (1-wlb), where wlb is the Wilson lower bound of
+    the in-zone win-rate (so a great rate on few dots scores low -- prevents the
+    overfit 'sell 0.98 on n=20' pick). Returns (ev_adj, T, zones, n_in_zone) or None.
+    NOTE: still in-sample / illustrative -- a critique aid, not a validated edge."""
+    pts = sorted((m, y) for m, y, c in mdots if m is not None)
+    if len(pts) < 24:
+        return None
+    ms = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    k = max(15, len(pts) // 8)
+    best = None
+    Ti = int(round((z + 0.02) * 100))
+    while Ti <= 99:
+        T = Ti / 100.0
+        be = z / T
+        roi = (T - z) / z
+        zones = _gap_zones(ms, ys, T, be, k)
+        if zones:
+            inz = [y for m, y in pts if any(lo <= m <= hi for lo, hi in zones)]
+            n_in = len(inz)
+            if n_in >= min_n:
+                wins = sum(1 for y in inz if y >= T - 1e-9)
+                wlb = wilson_lb(wins, n_in)
+                ev_adj = wlb * roi - (1.0 - wlb)
+                if best is None or ev_adj > best[0]:
+                    best = (ev_adj, T, zones, n_in)
+        Ti += 2
+    return best
+
+
+def make_margin_plot(side, cent, mdots, z, outpath):
+    """The exit map re-plotted against BTC margin, WITH the buy/sell decision drawn on:
+      x = BTC gap from strike at entry ($; <0 below)   y = highest sellable value
+      color = resolved outcome (green Up / red Down)
+      purple line = chosen sell target;  green shaded span(s)+boundary lines = BUY
+      zone(s) where the gap response beats breakeven for that sell; outside = no-buy.
+    The (sell, zone) pair is the conditional-EV optimum (in-sample, illustrative)."""
+    fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=85)
+    gx = [m for m, y, c in mdots if c == "g"]
+    gy = [y for m, y, c in mdots if c == "g"]
+    rx = [m for m, y, c in mdots if c == "r"]
+    ry = [y for m, y, c in mdots if c == "r"]
+    bc = best_conditional(mdots, z)
+    if bc:
+        ev, sell_T, zones, n_in = bc
+        first = True
+        for lo, hi in zones:
+            ax.axvspan(lo, hi, color="#3fb950", alpha=0.13, zorder=0,
+                       label="BUY zone" if first else None)
+            ax.axvline(lo, color="#2ea043", ls="--", lw=1, zorder=1)
+            ax.axvline(hi, color="#2ea043", ls="--", lw=1, zorder=1)
+            first = False
+    ax.scatter(rx, ry, s=22, c="#e5534b", alpha=0.6, edgecolors="none", label=f"Down ({len(rx)})")
+    ax.scatter(gx, gy, s=22, c="#3fb950", alpha=0.6, edgecolors="none", label=f"Up ({len(gx)})")
+    ax.axhline(z, ls="--", lw=1, color="#888", label=f"entry {cent}c")
+    if bc:
+        ax.axhline(sell_T, color="#8957e5", lw=2.2, zorder=4, label=f"sell {sell_T:.2f}")
+        ax.text(0.02, 0.04, f"buy in zone, sell {sell_T:.2f}  cond-EVadj {ev:+.2f}  (n={n_in}, in-sample)",
+                transform=ax.transAxes, fontsize=7.5, color="#5a32a3", weight="bold",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#8957e5", alpha=0.9))
+    ax.axvline(0, ls=":", lw=1, color="#999", label="strike (gap 0)")
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("BTC gap from strike at entry ($)   [<0 = below strike]")
+    ax.set_ylabel("highest sellable value (else 1=win / 0=loss at resolution)")
+    ax.set_title(f"{side.upper()} @ {cent}c  |  buy/sell decision vs BTC gap  |  n={len(mdots)}")
+    ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
+    ax.grid(True, alpha=0.15)
+    fig.tight_layout()
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main():
     conn = panel.connect()
     windows = load_windows(conn)
     conn.close()
-    # pass 1: build every map's dots, then the per-map admission threshold (median-based)
-    all_dots = {}
+    # pass 1: build every map's dots (exit + margin), then the admission threshold
+    all_dots, all_mdots = {}, {}
     for side in ("up", "down"):
         for cent in range(1, 100):
-            dots = []
+            dots, mdots = [], []
             for w in windows:
                 won = (w["outcome"] == "Up") if side == "up" else (w["outcome"] == "Down")
                 eb = entry_and_exit(w[side], cent, won)
                 if eb is None:
                     continue
                 x, y = eb
-                dots.append((x, y, "g" if w["outcome"] == "Up" else "r"))
+                color = "g" if w["outcome"] == "Up" else "r"
+                dots.append((x, y, color))
+                m = entry_margin(w[side], cent)
+                if m is not None:
+                    mdots.append((m, y, color))
             all_dots[(side, cent)] = dots
+            all_mdots[(side, cent)] = mdots
     threshold = map_admit_threshold([len(v) for v in all_dots.values()])
     # pass 2: plot; only maps above the threshold get a fitted sell line
     for side in ("up", "down"):
@@ -259,8 +383,22 @@ def main():
             admitted += int(admit)
             make_plot(side, cent, dots, os.path.join(sd, f"entry_{cent:02d}c.png"), admit=admit)
         print(f"  {side}: wrote 99 charts ({nonempty} with data, {admitted} admitted) -> {sd}")
+    # margin-correlation maps: one per side, per entry-cent that has data
+    for side in ("up", "down"):
+        md = os.path.join(OUTDIR, side + "_margin")
+        os.makedirs(md, exist_ok=True)
+        wrote = 0
+        for cent in range(1, 100):
+            mdots = all_mdots[(side, cent)]
+            if not mdots:
+                continue
+            make_margin_plot(side, cent, mdots, cent / 100.0,
+                             os.path.join(md, f"entry_{cent:02d}c.png"))
+            wrote += 1
+        print(f"  {side}_margin: wrote {wrote} margin-correlation charts -> {md}")
     print(f"done. {len(windows)} settled windows. map admission floor: n >= {threshold:.0f} "
-          f"dots. open exit_maps/up and exit_maps/down")
+          f"dots. open exit_maps/up, exit_maps/down, and exit_maps/up_margin, "
+          f"exit_maps/down_margin")
 
 
 if __name__ == "__main__":
