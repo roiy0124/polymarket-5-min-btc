@@ -41,6 +41,9 @@ ALPHA = 0.05              # one-sided significance for "win-rate beats breakeven
 POWER = 0.80              # power to detect that edge -> sets the min dots a line needs
 MAP_FRAC = 0.30           # a map must hold >= this share of the median map's dots...
 MAP_FLOOR = 20            # ...AND at least this many total, else it's too thin to trust
+FILT_LINE_FRAC = 0.10     # margin_filtered maps: a fitted sell line must be backed by
+                          # >= this share of the map's ORIGINAL (pre-filter) dots, else
+                          # it's a thin cherry-pick -> draw no line. Dynamic, not fixed.
 OUTDIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "exit_maps")
 
@@ -191,7 +194,7 @@ def best_sell_window(dots, z):
     return t1, t2, T, win_rate, roi, ev, n
 
 
-def make_plot(side, cent, dots, outpath, admit=True):
+def make_plot(side, cent, dots, outpath, admit=True, min_line_n=0):
     z = cent / 100.0
     fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=85)
     if dots:
@@ -216,7 +219,15 @@ def make_plot(side, cent, dots, outpath, admit=True):
     # window, draw the SELL line (dots above = win, below = loss), label it, and
     # print the sell price in the right margin (outside the plot).
     bw = best_sell_window(dots, z) if admit else None
-    if not admit and dots:
+    # dynamic floor (margin_filtered maps): drop a line that, after filtering, rests on
+    # too small a share of the ORIGINAL sample -- a thin cherry-pick, not a signal.
+    if bw and min_line_n and bw[6] < min_line_n:
+        ax.text(0.02, 0.035,
+                f"too thin after filtering (line n={bw[6]} < floor {min_line_n})",
+                transform=ax.transAxes, fontsize=7.5, color="#999", style="italic",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#ccc", alpha=0.9))
+        bw = None
+    elif not admit and dots:
         ax.text(0.02, 0.035, f"map too thin to fit a line (n={len(dots)})",
                 transform=ax.transAxes, fontsize=7.5, color="#999", style="italic",
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#ccc", alpha=0.9))
@@ -351,11 +362,13 @@ def main():
     conn = panel.connect()
     windows = load_windows(conn)
     conn.close()
-    # pass 1: build every map's dots (exit + margin), then the admission threshold
-    all_dots, all_mdots = {}, {}
+    # pass 1: build every map's dots (exit + margin + the joined full set), then the
+    # admission threshold. all_full keeps (entry_x, exit_value, margin, color) so we
+    # can filter by margin zone and re-plot by time (the margin_filtered maps).
+    all_dots, all_mdots, all_full = {}, {}, {}
     for side in ("up", "down"):
         for cent in range(1, 100):
-            dots, mdots = [], []
+            dots, mdots, full = [], [], []
             for w in windows:
                 won = (w["outcome"] == "Up") if side == "up" else (w["outcome"] == "Down")
                 eb = entry_and_exit(w[side], cent, won)
@@ -365,10 +378,12 @@ def main():
                 color = "g" if w["outcome"] == "Up" else "r"
                 dots.append((x, y, color))
                 m = entry_margin(w[side], cent)
+                full.append((x, y, m, color))
                 if m is not None:
                     mdots.append((m, y, color))
             all_dots[(side, cent)] = dots
             all_mdots[(side, cent)] = mdots
+            all_full[(side, cent)] = full
     threshold = map_admit_threshold([len(v) for v in all_dots.values()])
     # pass 2: plot; only maps above the threshold get a fitted sell line
     for side in ("up", "down"):
@@ -396,6 +411,31 @@ def main():
                              os.path.join(md, f"entry_{cent:02d}c.png"))
             wrote += 1
         print(f"  {side}_margin: wrote {wrote} margin-correlation charts -> {md}")
+    # margin-FILTERED time maps: keep only dots inside the margin buy-zone, then plot
+    # them on the TIME axis with a fresh sell-line fit -- "does a time edge emerge once
+    # we condition on the favorable gap?" (n shown = how many survived the filter)
+    for side in ("up", "down"):
+        fd = os.path.join(OUTDIR, side + "_margin_filtered")
+        os.makedirs(fd, exist_ok=True)
+        wrote = 0
+        for cent in range(1, 100):
+            mdots = all_mdots[(side, cent)]
+            if not mdots:
+                continue
+            bc = best_conditional(mdots, cent / 100.0)
+            if not bc:
+                continue
+            zones = bc[2]
+            filt = [(x, y, c) for (x, y, m, c) in all_full[(side, cent)]
+                    if m is not None and any(lo <= m <= hi for lo, hi in zones)]
+            if len(filt) < 8:
+                continue
+            # floor scales with the map's ORIGINAL size, not a fixed number
+            floor = math.ceil(FILT_LINE_FRAC * len(all_dots[(side, cent)]))
+            make_plot(side, cent, filt, os.path.join(fd, f"entry_{cent:02d}c.png"),
+                      admit=True, min_line_n=floor)
+            wrote += 1
+        print(f"  {side}_margin_filtered: wrote {wrote} gap-conditioned time maps -> {fd}")
     print(f"done. {len(windows)} settled windows. map admission floor: n >= {threshold:.0f} "
           f"dots. open exit_maps/up, exit_maps/down, and exit_maps/up_margin, "
           f"exit_maps/down_margin")
