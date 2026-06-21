@@ -26,3 +26,4 @@ round_reviews/*.png
 *.bak
 spike_reversion.png
 *.out
+paper_nested_trades.csv
