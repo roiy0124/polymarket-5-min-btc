@@ -29,6 +29,43 @@ explicit opt-in described below — nothing here can spend money on its own.
 | `exec_engine/user_stream.py` | live user-channel WS listener (fills/orders), gated by creds |
 | `exec_engine/selftest.py` | scripted end-to-end paper test (run it: `python -m exec_engine.selftest`) |
 | `paper_trade.py` | live PAPER harness — drives the engine off the real trade stream |
+| `phase2.py` | PAPER executor — forward-tests signals.json (PaperBroker) |
+| `live_runner.py` | **Phase 3 LIVE executor** (LiveBroker) — REAL money. See below. |
+
+## Phase 3 — `live_runner.py` (LIVE, real money) — *UNTESTED*
+
+The live sibling of `phase2.py`. Reuses the entire spine (signals.json,
+StrategyRunner, OrderManager auto-sell, settlement, epoch-stamped ledger) and
+changes only: (1) broker → `LiveBroker` + `SafetyConfig(live=True)`; (2) fills come
+from the authenticated `UserStream`, gated on **CONFIRMED**, routed via `FillRouter`
+into the same auto-sell path; (3) live-only safety: file kill-switch (`KILL`),
+structured JSON log (`live_runner.log`), periodic reconcile. Refreshes signals on
+startup like the paper executor.
+
+**Cannot spend money by accident — triple-gated:**
+- Default mode `--connectivity` is read-only (auth + list orders/trades/balances).
+- Real trading needs BOTH `--arm` AND env `LIVE_RUNNER_CONFIRM=I_UNDERSTAND`.
+- Every order still passes `SafetyConfig.validate` + account caps; conservative
+  defaults (`--max-order-usd 5`, `--max-position-usd 20`, `--daily-loss-usd 20`).
+
+```sh
+python live_runner.py --connectivity        # read-only; run FIRST once EOA funded
+python live_runner.py --arm --min-ev 0.5    # REAL orders (needs the confirm env var)
+```
+Credentials via env / git-ignored `.env`: `POLY_PRIVATE_KEY`, `POLY_FUNDER`.
+
+### KNOWN GAPS before this can be trusted with money
+1. **User-channel field names UNVERIFIED** — `FillRouter._match` / status parsing are
+   confirmed on paper from research, never against a live socket. Watch first fills
+   by hand; verify `asset_id`/`status`/order-id keys.
+2. **Per-window re-subscription** — `UserStream` subscribes once at connect; it does
+   not yet re-subscribe to each new window's tokens. Needs fixing for unattended runs.
+3. **Reconciliation is detect-only** — logs drift, does not handle position drift /
+   halt-and-flatten. No idempotency/retry on `place()` (network blip → possible dup).
+4. **Allowances + fees** — USDC+CTF approvals and the real maker/taker fee still
+   unverified (orders silently fail without allowances; fees bite the ~11¢ margin).
+5. **Edge not validated** — do not run for real until the paper edge clears the bar
+   (see memory `paper-edge-not-yet-validated`).
 
 ## Fill model (paper) — and why it's conservative
 

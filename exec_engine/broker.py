@@ -149,16 +149,19 @@ class LiveBroker(Broker):
     cancels them via py-clob-client.
 
     SAFETY: refuses to operate unless SafetyConfig(live=True) AND credentials are
-    supplied. Only a plain EOA (signature_type=0, funder=EOA) is verified to work
-    end-to-end — website/proxy (POLY_1271) accounts fail with HTTP 400, so this
-    enforces signature_type=0 by default. UNTESTED without real keys: paper-trade
-    first, ensure USDC+CTF allowances are set, and watch the first live fills by
-    hand. Fill detection / auto-sell is driven by user_stream gated on CONFIRMED.
+    supplied. Supports all three Polymarket wallet types via signature_type:
+      0 = EOA (self-custody; funder = the signer's own address)
+      1 = POLY_PROXY (Polymarket email/Google login; funder = proxy/deposit address)
+      2 = POLY_GNOSIS_SAFE (browser-wallet proxy; funder = proxy address)
+    For 1/2 the signer key is the Magic/owner key (exported from Polymarket) and the
+    funder is the PROXY address that holds the USDC. UNTESTED without real keys:
+    paper-trade first, ensure USDC+CTF allowances are set, and watch the first live
+    fills by hand. Fill detection / auto-sell is driven by user_stream on CONFIRMED.
 
     credentials = {
-        "private_key": "0x...",        # the EOA private key (L1 signer)
-        "funder": "0x...",             # usually the SAME EOA address
-        "signature_type": 0,            # EOA; do NOT use 3 (POLY_1271) — broken w/ SDK
+        "private_key": "0x...",        # the L1 signer key (EOA or exported proxy key)
+        "funder": "0x...",             # EOA addr (type 0) or proxy/deposit addr (1/2)
+        "signature_type": 0,            # 0 EOA | 1 POLY_PROXY | 2 POLY_GNOSIS_SAFE
         "host": "https://clob.polymarket.com",   # optional
         "api_creds": {...},             # optional; derived if omitted
         "neg_risk": False,              # set True only for neg-risk markets
@@ -176,11 +179,14 @@ class LiveBroker(Broker):
         if not credentials or not credentials.get("private_key"):
             raise RuntimeError("LiveBroker requires credentials with a 'private_key'.")
         sigtype = credentials.get("signature_type", 0)
-        if sigtype != 0:
+        if sigtype not in (0, 1, 2):
             raise RuntimeError(
-                f"signature_type={sigtype} is not supported. Only a plain EOA "
-                f"(signature_type=0, funder=EOA) is verified; website/proxy "
-                f"(POLY_1271=3) accounts fail HTTP 400 with the SDK. Fund a plain EOA.")
+                f"signature_type={sigtype} invalid. Use 0 (EOA / self-custody), "
+                f"1 (POLY_PROXY = Polymarket email/Google login), or 2 "
+                f"(POLY_GNOSIS_SAFE = browser-wallet proxy). For 1 and 2 the "
+                f"'funder' must be your Polymarket proxy/deposit address (where the "
+                f"USDC sits), NOT the signer's address.")
+        self.signature_type = sigtype
         self.credentials = credentials
         self.neg_risk = bool(credentials.get("neg_risk", False))
         self._client = None
@@ -197,7 +203,7 @@ class LiveBroker(Broker):
             raise RuntimeError("pip install py-clob-client (see requirements-exec.txt)") from e
         c = self.credentials
         client = ClobClient(c.get("host", self.HOST), key=c["private_key"],
-                            chain_id=self.CHAIN_ID, signature_type=0,
+                            chain_id=self.CHAIN_ID, signature_type=self.signature_type,
                             funder=c.get("funder"))
         creds = c.get("api_creds") or client.create_or_derive_api_creds()
         client.set_api_creds(creds)

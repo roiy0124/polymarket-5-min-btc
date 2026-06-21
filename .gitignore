@@ -14,4 +14,8 @@ round_charts/**/*.png
 signals.json
 signals_history.jsonl
 paper_trades.csv
+live_trades.csv
+live_runner.log
+.env
+KILL
 round_reviews/*.png
