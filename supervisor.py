@@ -60,7 +60,12 @@ class Child:
 
     def start(self):
         self.out.write(f"\n--- supervisor start {_ts()} ---\n")
-        self.proc = subprocess.Popen(self.cmd, cwd=HERE, stdout=self.out, stderr=self.err)
+        # On Windows, spawn each child WITHOUT its own console window (stdout/stderr
+        # already go to the .out.log / .err.log files) so 14 children don't open 14
+        # blank cmd windows. No-op on other platforms.
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        self.proc = subprocess.Popen(self.cmd, cwd=HERE, stdout=self.out, stderr=self.err,
+                                     creationflags=flags)
         self.started_at = time.time()
         print(f"[{_ts()}] started {self.name} pid={self.proc.pid}", flush=True)
 
