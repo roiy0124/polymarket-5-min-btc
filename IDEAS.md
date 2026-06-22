@@ -194,4 +194,16 @@ alt-idiosyncratic moves; (d) fee needs a fat dislocation.
 **Decision (2026-06-23):** design agreed — scan-and-compare (no fixed leader/target; absorbs C);
 **B1 simple existence test first** (correlation prerequisite + gap→convergence + gap→outcome-
 residual, no cost modeling), on ~24h of data; **B2 net-of-spread taker sim deferred** until B1
-is positive. Build B1 once ~24h of multi-coin data is in (BTC is ready now; alts ~half a day).
+is positive. Built `experiment_xasset_smt.py`.
+
+**B1 FIRST PASS (2026-06-23, only ~4.3h of overlap — PRELIMINARY, not the 24h bar):**
+- Part 1 (prerequisite) — **STRONG: coins move together, mean pairwise corr +0.64** (BTC–ETH
+  0.73; all 0.57–0.73). Divergences are meaningful. Robust even on 4.3h. ✅
+- Part 2 (convergence) — **inconclusive: corr(gap, fwd) = +0.037, CI [+0.004,+0.069]**. Tiny,
+  the CI is *understated* (return autocorrelation), and it's only 4.3h. NOT a signal yet.
+- DATA NOTE: alts only began clean collection 06-22 16:11 UTC (~4.3h); the double-supervisor
+  left **duplicate snapshot rows** (123% coverage) — B1 dedupes by second so it's unaffected,
+  but run the dedupe pass before deeper analysis.
+- NEXT: re-run at **≥24h** (≈20h away); add a **per-coin** convergence breakdown (pooling the
+  leader BTC with laggard alts dilutes — alts should converge more, BTC less); then, if Part 2
+  firms up, do Part 3 (gap vs the QUOTE = is it unpriced) → B2.
