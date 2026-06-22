@@ -30,7 +30,7 @@ of the exchanges, so it can't beat them on speed; it's only relevant for settlem
 - **B. Cross-asset divergence scan (SMT)** — 🟢 design agreed; B1 simple existence test next (absorbs C)
 - ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
 - **D. Settlement-basis edge (Chainlink vs Binance)** — 🟢 discussed; free-only (replicate Chainlink), gated on disagreement-rate
-- E. Maker-rebate harvesting at the tails — ⚪ queued
+- **E. Maker-rebate harvesting at the tails** — 🟡 discussed → ruled out standalone; rebate kept as a net-EV +term
 - F. Multi-coin as a measurement multiplier (meta) — ⚪ queued
 
 ## D. Settlement-basis edge (Chainlink vs Binance/Pyth)
@@ -79,6 +79,37 @@ free on-chain read), never paid. **Gate on the disagreement-rate** (`our_outcome
 `resolved_outcome` Chainlink — how often they differ = the whole opportunity size); if ~0%, drop
 D. Frame as a small *contributor* edge (per the guiding principle), concentrated in coin-flip
 boundary windows. Testing deferred until more data.
+
+## E. Maker-rebate harvesting at the tails
+
+**Status:** discussed 2026-06-23 → **ruled out as a standalone strategy**; the rebate survives
+only as a small additive term. (Discussion-only; no test needed — the kill is structural.)
+
+**The idea was:** makers pay 0 fee + earn a rebate, so rest limit orders to collect rebates +
+benign fills, specifically at the **extremes** (deep favorites ~0.95 / longshots ~0.05) where
+informed/toxic flow — and thus adverse selection — is thinnest.
+
+**Why it dies (structural, quantified):**
+1. **The rebate uses the SAME fee curve:** `rebate_equiv = C·feeRate·p·(1−p)`. So it is LARGEST
+   at p=0.50 and **→0 at the tails**. Best-case (you = all maker volume, crypto 20% share):
+   ~0.7% of stake at 50/50, **~0.07% at p=0.95**. So "rebate at the tails" is self-defeating —
+   the rebate is **biggest exactly where toxicity is worst (50/50)** and **negligible exactly
+   where toxicity is low (the tails)**. The two desiderata are anti-correlated by the formula.
+2. **Even at 50/50 the rebate (~0.7%) is dwarfed by adverse selection** (the passive branch
+   lost ~−0.3 to −0.6 EV/fill). The rebate can't offset it. (Confirmed: [[deep-research-verdict]],
+   [[exit-execution-verdict]].)
+3. **Rebates LOWER fill rates** (NASDAQ pilot: 3.65%→14.86% when the subsidy was removed) — and
+   the rebate is **pro-rata by filled volume**, so resting-for-rebate fills rarely → earns little.
+4. **Adverse selection persists at the tails** (winner's curse): a resting buy at 0.95 fills
+   exactly when the favorite is about to crater → −95%. Brutal asymmetry, thin rebate.
+5. **Pro-rata pool favors big MMs** — retail's share of the 20% pool is crumbs.
+
+**What survives (per the edge-stacking principle):** don't *farm* rebates, but **include the
+rebate as a small `+` term in `net_ev` for any maker leg we'd take anyway** (e.g., the
+maker-rest exit in idea A). It's a marginal contributor, not a strategy.
+
+**Decision:** ruled out as standalone. Keep `+ maker_rebate(p)` in the net-EV for maker fills
+(small). No separate test.
 
 ## Deferred tech-debt
 - **Price-column naming.** `btc_binance` / `btc_pyth` / `btc_ticks` hold each coin's OWN
