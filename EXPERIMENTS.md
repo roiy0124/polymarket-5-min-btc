@@ -71,6 +71,7 @@ are folded into "Strategies tried" below):
 | `experiment_combined.py` | **(shared lib)** two-screen (exit-line AND gap-response); exports `load_full` / `train_dots` | both-screens > parts, but ~breakeven |
 | `experiment_config_tod.py` | config brute-force × time-of-day, 30-min cadence, **live-matching guard** | DECISIVE: nested +0.02 was a **guard artifact**; corrected guard → EV/fill ≈ **0.00** (breakeven), no edge |
 | `experiment_lookback_sweep.py` | sweet-spot 3-lookback combo + robustness gate, baseline vs nested, **live-matching guard** | passive nested ≈ breakeven once the guard matches the executor |
+| `experiment_trend_outcome.py` | **TREND→OUTCOME vs PRICE** (knowledge-edge test), one obs/window, bootstrap CIs. corr(recent BTC trend, outcome) vs corr(trend, residual=outcome−market_price) | **Trend strongly predicts the OUTCOME** (corr +0.15..+0.40, significant, grows with lookback) — but **the market PRICE already prices it**: corr(trend, RESIDUAL) ≈ **0** at every lookback & horizon (CI includes 0, no `*`). The token price is highly efficient (Brier ~0.12 @60s). True-but-useless: no knowledge edge from trend. Matches the position finding (`fair_vs_market`: corr −0.03) |
 | `experiment_lookahead_taker.py` | **FASTER-FEED test** (the live one), window-clustered bootstrap CIs. (A) lead-lag cross-corr; (B) **Q1 value of real-time**: clairvoyant-Δ taker, bid(taker) vs mid(maker) exit, Δ∈{0,.5,1,2,3}s, lift-vs-Δ0 CI; (C) **Q2 when**: EV by 3h-UTC hour + by BTC-vol tercile | **BTC LEADS by ~1s (r=0.36).** Q1: feed lift **significant at every lead** (~+0.006/$1 per sec, saturates ~2s) — faster feed provably worth money. BUT **spread dominates**: taker exit −0.011..−0.020, maker(mid) −0.001..−0.009; the taker→maker gap (>feed lift) means **maker-exit is the bigger lever**. At the **clairvoyant upper bound**, feed+maker ≈ **breakeven** (`+0.000[−0.001,+0.002]`). Q2: **no clean hour** (all CIs straddle/below 0); **high-vol NOT best** (widens spread), mid-vol least-bad. Structure right, lag too small to clear the spread on this data |
 
 ---
@@ -94,6 +95,10 @@ are folded into "Strategies tried" below):
    one filter that nudged nested marginally positive (~+0.02); later shown to be the
    guard artifact → breakeven with the live-matching guard.
 9. **BTC spike-reversion** (side idea) — no systematic reversion; dead.
+10b. **Trend → outcome (knowledge edge)** — recent BTC trend strongly predicts the 5-min
+    outcome (corr up to +0.40) **but the token price already prices it** (corr with the
+    residual ≈ 0, not significant). Same verdict as static fair-value: **the market is
+    efficient on knowledge** (price Brier ~0.12). Predicting the outcome ≠ beating the price.
 10. **Fair-value TAKER / faster feed** (the pivot away from passive) — *the first
     structurally-sound signal,* now measured with window-clustered CIs. Lead-lag proves
     **BTC leads the quote by ~1s** (r=0.36). **Q1:** a faster feed is **provably worth
