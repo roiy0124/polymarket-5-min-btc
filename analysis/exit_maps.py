@@ -26,6 +26,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import coins
 from . import panel
 
 WINDOW = 300.0
@@ -359,7 +360,13 @@ def make_margin_plot(side, cent, mdots, z, outpath):
 
 
 def main():
-    conn = panel.connect()
+    import argparse
+    ap = argparse.ArgumentParser(description="exit maps for one coin")
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS),
+                    help="which coin's data to map (default: env ANALYSIS_COIN or btc)")
+    args = ap.parse_args()
+    base = os.path.join(OUTDIR, args.coin)        # per-coin output: exit_maps/<coin>/...
+    conn = panel.connect(coin=args.coin)
     windows = load_windows(conn)
     conn.close()
     # pass 1: build every map's dots (exit + margin + the joined full set), then the
@@ -387,7 +394,7 @@ def main():
     threshold = map_admit_threshold([len(v) for v in all_dots.values()])
     # pass 2: plot; only maps above the threshold get a fitted sell line
     for side in ("up", "down"):
-        sd = os.path.join(OUTDIR, side)
+        sd = os.path.join(base, side)
         os.makedirs(sd, exist_ok=True)
         nonempty = admitted = 0
         for cent in range(1, 100):
@@ -400,7 +407,7 @@ def main():
         print(f"  {side}: wrote 99 charts ({nonempty} with data, {admitted} admitted) -> {sd}")
     # margin-correlation maps: one per side, per entry-cent that has data
     for side in ("up", "down"):
-        md = os.path.join(OUTDIR, side + "_margin")
+        md = os.path.join(base, side + "_margin")
         os.makedirs(md, exist_ok=True)
         wrote = 0
         for cent in range(1, 100):
@@ -415,7 +422,7 @@ def main():
     # them on the TIME axis with a fresh sell-line fit -- "does a time edge emerge once
     # we condition on the favorable gap?" (n shown = how many survived the filter)
     for side in ("up", "down"):
-        fd = os.path.join(OUTDIR, side + "_margin_filtered")
+        fd = os.path.join(base, side + "_margin_filtered")
         os.makedirs(fd, exist_ok=True)
         wrote = 0
         for cent in range(1, 100):
@@ -436,9 +443,9 @@ def main():
                       admit=True, min_line_n=floor)
             wrote += 1
         print(f"  {side}_margin_filtered: wrote {wrote} gap-conditioned time maps -> {fd}")
-    print(f"done. {len(windows)} settled windows. map admission floor: n >= {threshold:.0f} "
-          f"dots. open exit_maps/up, exit_maps/down, and exit_maps/up_margin, "
-          f"exit_maps/down_margin")
+    print(f"done [{args.coin}]. {len(windows)} settled windows. map admission floor: "
+          f"n >= {threshold:.0f} dots. output -> {base}/"
+          f"{{up,down,up_margin,down_margin,up_margin_filtered,down_margin_filtered}}")
 
 
 if __name__ == "__main__":
