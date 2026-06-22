@@ -24,7 +24,8 @@ from exec_engine.broker import PaperBroker
 from exec_engine.order_manager import OrderManager
 from exec_engine.model import Side
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.db")
+import coins
+DB_PATH = coins.live_db("btc")
 WINDOW_SECONDS = 300
 
 

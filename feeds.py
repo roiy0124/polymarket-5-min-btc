@@ -20,9 +20,11 @@ import json
 import urllib.request
 import urllib.parse
 
+import coins
+
 GAMMA_EVENTS = "https://gamma-api.polymarket.com/events"
 CLOB_BOOK = "https://clob.polymarket.com/book"
-BINANCE_PRICE = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+BINANCE_PRICE = "https://api.binance.com/api/v3/ticker/price?symbol={}"
 PYTH_LATEST = "https://hermes.pyth.network/v2/updates/price/latest"
 PYTH_BTC_ID = "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43"
 
@@ -40,15 +42,16 @@ def _get_json(url, timeout=DEFAULT_TIMEOUT):
 # Market discovery (Gamma)
 # ---------------------------------------------------------------------------
 
-def slug_for(window_start):
-    """The market slug is exactly the window-start unix timestamp."""
-    return f"btc-updown-5m-{int(window_start)}"
+def slug_for(window_start, coin="btc"):
+    """The market slug is the coin's prefix + the window-start unix timestamp,
+    e.g. btc-updown-5m-1782097200 / eth-updown-5m-1782097200."""
+    return f"{coins.slug_prefix(coin)}-{int(window_start)}"
 
 
-def fetch_market(window_start, timeout=DEFAULT_TIMEOUT):
-    """Return a normalized dict for the 5-min market starting at window_start,
-    or None if it doesn't exist yet / can't be parsed."""
-    url = f"{GAMMA_EVENTS}?slug={urllib.parse.quote(slug_for(window_start))}"
+def fetch_market(window_start, coin="btc", timeout=DEFAULT_TIMEOUT):
+    """Return a normalized dict for the coin's 5-min market starting at
+    window_start, or None if it doesn't exist yet / can't be parsed."""
+    url = f"{GAMMA_EVENTS}?slug={urllib.parse.quote(slug_for(window_start, coin))}"
     data = _get_json(url, timeout=timeout)
     if not data:
         return None
@@ -137,8 +140,8 @@ def fetch_book(token_id, timeout=DEFAULT_TIMEOUT, depth=10):
 # Price feeds
 # ---------------------------------------------------------------------------
 
-def fetch_binance(timeout=DEFAULT_TIMEOUT):
-    data = _get_json(BINANCE_PRICE, timeout=timeout)
+def fetch_binance(symbol="BTCUSDT", timeout=DEFAULT_TIMEOUT):
+    data = _get_json(BINANCE_PRICE.format(symbol), timeout=timeout)
     return float(data["price"])
 
 

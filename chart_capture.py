@@ -30,9 +30,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import feeds
+import coins
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
+DB_PATH = coins.live_db("btc")
 OUTDIR = os.path.join(HERE, "round_charts")
 WINDOW = 300
 INTERVAL = 5.0

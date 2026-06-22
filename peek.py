@@ -8,7 +8,8 @@ import os
 import sqlite3
 import sys
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.db")
+import coins
+DB_PATH = coins.live_db("btc")
 
 
 def fmt(v, nd=4):

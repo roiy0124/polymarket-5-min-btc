@@ -20,17 +20,21 @@ import time
 import signal
 import subprocess
 
+import coins
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 STOP_FILE = os.path.join(HERE, "STOP")
 PY = sys.executable
 
-CHILDREN = [
-    # -u = unbuffered stdout so logs flush promptly to the .out.log files
-    ("collector",     [PY, "-u", "collector.py"]),
-    ("ws_collector",  [PY, "-u", "ws_collector.py"]),
-    ("viewer",        [PY, "-u", "viewer.py", "8765"]),
-    ("chart_capture", [PY, "-u", "chart_capture.py"]),
-]
+# One REST + one WebSocket collector per enabled coin (each writes its own
+# data/<coin>/live.db and its own <name>.out.log / .err.log), plus the shared
+# BTC-focused viewer + chart_capture. Trim coins.ENABLED to collect fewer.
+CHILDREN = []
+for _c in coins.ENABLED:
+    CHILDREN.append((f"collector_{_c}",    [PY, "-u", "collector.py", "--coin", _c]))
+    CHILDREN.append((f"ws_collector_{_c}", [PY, "-u", "ws_collector.py", "--coin", _c]))
+CHILDREN.append(("viewer",        [PY, "-u", "viewer.py", "8765"]))
+CHILDREN.append(("chart_capture", [PY, "-u", "chart_capture.py"]))
 
 CHECK_INTERVAL = 3.0
 BACKOFF_START = 2.0

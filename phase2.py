@@ -29,8 +29,9 @@ from exec_engine.broker import PaperBroker
 from exec_engine.order_manager import OrderManager
 from exec_engine.strategy_runner import StrategyRunner, WINDOW
 
+import coins
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
+DB_PATH = coins.live_db("btc")
 SIGNALS = os.path.join(HERE, "signals.json")
 LEDGER = os.path.join(HERE, "paper_trades.csv")
 FIELDS = ["window_start", "side", "entry_z", "buy_filled", "fill_px", "sell_T",

@@ -16,7 +16,8 @@ import sqlite3
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.db")
+import coins
+DB_PATH = coins.live_db("btc")
 REFRESH_SECONDS = 5
 
 

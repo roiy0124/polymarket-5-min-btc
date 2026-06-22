@@ -41,9 +41,10 @@ from exec_engine.config import SafetyConfig
 from exec_engine.broker import PaperBroker
 from exec_engine.order_manager import OrderManager
 
+import coins
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
-OLD_DBS = os.path.join(HERE, "old_dbs")
+DB_PATH = coins.live_db("btc")
+OLD_DBS = coins.archive_dir("btc")
 OUT_CSV = os.path.join(HERE, "walkforward_trades.csv")
 WINDOW = 300.0
 

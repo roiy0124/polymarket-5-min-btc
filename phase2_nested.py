@@ -33,8 +33,9 @@ from exec_engine.broker import PaperBroker
 from exec_engine.order_manager import OrderManager
 from exec_engine.strategy_runner import StrategyRunner, WINDOW
 
+import coins
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
+DB_PATH = coins.live_db("btc")
 LEDGER = os.path.join(HERE, "paper_nested_trades.csv")
 COMBO = (8, 16, 24)
 ENTRY_LO, ENTRY_HI = 5, 75

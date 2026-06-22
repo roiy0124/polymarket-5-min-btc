@@ -59,13 +59,8 @@ WINDOW = 300.0
 
 
 def db_paths():
-    here = os.path.dirname(os.path.abspath(__file__))
-    paths = []
-    live = os.path.join(here, "btc_updown.db")
-    if os.path.exists(live):
-        paths.append(live)
-    paths += sorted(glob.glob(os.path.join(here, "old_dbs", "*.db")))
-    return paths
+    import coins
+    return coins.all_dbs("btc")
 
 
 def load_windows(conn):

@@ -11,15 +11,14 @@ import glob
 import sqlite3
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
-OLD_DBS_DIR = os.path.join(HERE, "old_dbs")
+import coins
+DB_PATH = coins.live_db("btc")
+OLD_DBS_DIR = coins.archive_dir("btc")
 
 
 def _source_dbs():
-    """Current DB + any archived DBs in old_dbs/."""
-    dbs = [DB_PATH] if os.path.exists(DB_PATH) else []
-    dbs += sorted(glob.glob(os.path.join(OLD_DBS_DIR, "*.db")))
-    return dbs
+    """Current live DB + any archived DBs for BTC (fallback-aware via coins)."""
+    return coins.all_dbs("btc")
 
 
 def _merged_connection(days):

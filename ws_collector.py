@@ -20,22 +20,23 @@ offline. Run:  python ws_collector.py   (Ctrl-C to stop)
 Requires the `websockets` package (pip install -r requirements.txt).
 """
 
-import os
 import json
 import time
 import asyncio
+import argparse
 from collections import deque
 from datetime import datetime, timezone
 
 import websockets
 
+import coins
 import feeds
 import storage
 
 # ---- config -----------------------------------------------------------------
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.db")
+# DB path + Binance stream are per-coin (resolved in main() from --coin).
 MARKET_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
-BINANCE_WS = "wss://stream.binance.com:9443/ws/btcusdt@bookTicker"
+BINANCE_WS_T = "wss://stream.binance.com:9443/ws/{}@bookTicker"
 WINDOW_SECONDS = 300
 INACTIVITY_TIMEOUT = 20.0      # reconnect market WS after this many seconds of silence
 PROACTIVE_RECONNECT = 60.0     # also cycle the market WS this often to pre-empt freezes
@@ -61,6 +62,9 @@ def cur_window(ts):
 class State:
     def __init__(self):
         self.running = True
+        self.coin = "btc"
+        self.db_path = None
+        self.binance_ws = None
         self.market_ws = None
         # last two windows -> their (up, down) token ids; keeps the just-closed
         # window subscribed so we still capture tail trades after rollover.
@@ -101,7 +105,7 @@ async def window_manager(state):
             market = None
             for _ in range(3):
                 try:
-                    market = await asyncio.to_thread(feeds.fetch_market, start)
+                    market = await asyncio.to_thread(feeds.fetch_market, start, state.coin)
                 except Exception:
                     market = None
                 if market:
@@ -203,7 +207,7 @@ async def market_consumer(state):
 async def binance_consumer(state):
     while state.running:
         try:
-            async with websockets.connect(BINANCE_WS, ping_interval=PING_INTERVAL,
+            async with websockets.connect(state.binance_ws, ping_interval=PING_INTERVAL,
                                            ping_timeout=10) as ws:
                 while state.running:
                     try:
@@ -266,7 +270,7 @@ async def pruner(state):
         await asyncio.sleep(PRUNE_INTERVAL)
         cutoff = time.time() - RETAIN_DAYS * 86400.0
         try:
-            n_book, n_btc = await asyncio.to_thread(storage.prune_ws, DB_PATH, cutoff)
+            n_book, n_btc = await asyncio.to_thread(storage.prune_ws, state.db_path, cutoff)
             if n_book or n_btc:
                 print(f"[{time.strftime('%H:%M:%S')}] pruned book_events={n_book} "
                       f"btc_ticks={n_btc} (older than {RETAIN_DAYS:.0f}d)", flush=True)
@@ -276,10 +280,15 @@ async def pruner(state):
 
 # ---- main -------------------------------------------------------------------
 
-async def main():
-    conn = storage.connect(DB_PATH)
+async def main(coin):
+    db_path = coins.live_db(coin)
+    coins.ensure_dirs(coin)
+    conn = storage.connect(db_path)
     state = State()
-    print(f"ws_collector started -> {DB_PATH}  (Ctrl-C to stop)", flush=True)
+    state.coin = coin
+    state.db_path = db_path
+    state.binance_ws = BINANCE_WS_T.format(coins.binance_symbol(coin).lower())
+    print(f"ws_collector[{coin}] started -> {db_path}  (Ctrl-C to stop)", flush=True)
     tasks = [
         asyncio.create_task(window_manager(state)),
         asyncio.create_task(market_consumer(state)),
@@ -304,7 +313,11 @@ async def main():
 
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="5-min up/down WebSocket collector (one coin)")
+    ap.add_argument("--coin", default="btc", choices=list(coins.COINS),
+                    help="which coin's market to capture (default btc)")
+    _args = ap.parse_args()
     try:
-        asyncio.run(main())
+        asyncio.run(main(_args.coin))
     except KeyboardInterrupt:
         pass

@@ -28,8 +28,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
+import coins
+
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
+DB_PATH = coins.live_db("btc")
 LEDGER = os.path.join(HERE, "paper_trades.csv")
 OUTDIR = os.path.join(HERE, "round_reviews")
 WINDOW = 300.0

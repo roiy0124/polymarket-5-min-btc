@@ -21,9 +21,10 @@ import webbrowser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
-DB = os.path.join(HERE, "btc_updown.db")
+import coins
+DB = coins.live_db("btc")
 SIGNALS = os.path.join(HERE, "signals.json")
-OLD_DBS = os.path.join(HERE, "old_dbs")
+OLD_DBS = coins.archive_dir("btc")
 STOP = os.path.join(HERE, "STOP")
 DASH = "http://127.0.0.1:8765"
 
