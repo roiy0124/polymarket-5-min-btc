@@ -1,3 +1,7 @@
 # collector.py and peek.py use only the Python standard library (no install needed).
 # ws_collector.py (the real-time WebSocket layer) needs:
 websockets>=12.0
+# matplotlib is used by chart_capture.py (a supervisor child) + the chart analyses
+# (exit_maps, round_review). They now degrade/skip gracefully if it's missing, but the
+# default supervised run expects it. Install it into the SAME python you launch with.
+matplotlib>=3.5

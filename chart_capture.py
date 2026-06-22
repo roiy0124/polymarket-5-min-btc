@@ -26,9 +26,12 @@ import sqlite3
 import argparse
 from datetime import datetime, timezone
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None          # degrade gracefully so a missing optional dep can't crash-loop
 
 import feeds
 import coins
@@ -131,6 +134,14 @@ def main():
     ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS))
     ap.add_argument("--once", action="store_true", help="backfill existing windows and exit")
     args = ap.parse_args()
+    if plt is None:
+        print("chart_capture: matplotlib not installed -> charts disabled "
+              "(`pip install matplotlib`). Idling so the supervisor doesn't crash-loop.",
+              flush=True)
+        if args.once:
+            return
+        while True:
+            time.sleep(3600)
     DB_PATH = coins.live_db(args.coin)
     OUTDIR = os.path.join(HERE, "round_charts", args.coin)
     os.makedirs(OUTDIR, exist_ok=True)
