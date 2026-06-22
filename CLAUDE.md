@@ -37,13 +37,51 @@ reliable capture for a resting-limit-order strategy needs BOTH:
   hours); REST keeps working during it. `collector.py` also owns the
   per-window strike / final / official-resolution bookkeeping.
 
-Run BOTH together. `ws_collector.py` has its own 120s data-inactivity watchdog
-that force-reconnects. Both write to the same `btc_updown.db`.
+Run BOTH together, **per coin** (see Multi-coin below). `ws_collector.py` has its own
+data-inactivity watchdog that force-reconnects. Each coin's pair writes to that coin's
+own `data/<coin>/live.db`. You normally don't launch these by hand — `supervisor.py`
+spawns a `collector.py` + `ws_collector.py` pair for every enabled coin.
 
 Key constraint to design around: **queue position is NOT observable** — the
 public feed gives aggregate size per price level, not per-order ordering. Fill
 probability must be MODELED (depth at price + trade volume printing through it),
 not measured exactly.
+
+## Multi-coin layout (BTC + ETH/SOL/XRP/DOGE/BNB)
+
+The collector is **multi-coin**. All six markets share the slug pattern
+`{coin}-updown-5m-{window_start}` and the identical schema, so each coin gets its OWN
+database — `data/<coin>/live.db` (+ `data/<coin>/archive/`) — and the high-frequency
+writers never contend on a single SQLite file. A coin is a **folder**, not a column,
+so the per-window queries (keyed on `window_start`) are unchanged.
+
+- **`coins.py`** is the registry + path authority: per coin it holds the slug prefix,
+  the Binance symbol, and the Pyth feed id, and resolves `live_db(coin)` /
+  `archive_dir(coin)` / `all_dbs(coin)`. `ENABLED` is the list the supervisor launches.
+  `default_coin()` reads env **`ANALYSIS_COIN`** (default `btc`). A legacy fallback
+  still resolves BTC to the old root `btc_updown.db` + `old_dbs/` if the one-time
+  `migrate_to_data_layout.py` hasn't been run.
+- **Collectors take `--coin`** (default btc): `python collector.py --coin eth`. The
+  `--coin` selects the slug, Binance symbol, Pyth id, and `data/<coin>/` DB path.
+- **Analysis/inspection is coin-selectable** with ONE switch, env **`ANALYSIS_COIN`**,
+  honored by every `panel.connect()`-based tool (fairvalue, fair_vs_market, calibration,
+  exit_maps, signals, flow, backtest, reversion, data_quality, combo_ev), PLUS explicit
+  `--coin` on `peek.py`, `chart_capture.py`, `analysis/exit_maps.py`, and the live
+  experiments. Outputs are per-coin: `exit_maps/<coin>/...`, `round_charts/<coin>/`.
+- **`analyze_all.py`** runs the suite (exit maps + round-chart backfill) for many coins
+  at once, each into its own folder.
+
+```sh
+ANALYSIS_COIN=eth python -m analysis.fairvalue   # any panel analysis, scoped to ETH
+python peek.py --coin sol                         # inspect SOL's DB
+python -m analysis.exit_maps --coin xrp           # -> exit_maps/xrp/
+python analyze_all.py                             # all six, organized per coin
+```
+
+Deferred (still BTC-only by design — they resolve via `coins.live_db("btc")`): the
+closed passive-strategy experiments (`experiment_walkforward/combined/config_tod/
+lookback_sweep`) and the gated/legacy execution (`phase2`, `phase2_nested`,
+`paper_trade`, `live_runner`).
 
 ## How the market / auto-switch works (the key insight)
 
@@ -59,25 +97,32 @@ not measured exactly.
 
 ## Resolution source caveat (important for strategy validity)
 
-Markets settle on the **Chainlink BTC/USD data stream**
-(https://data.chain.link/streams/btc-usd), which is auth-gated. We log **Binance
-spot** and **Pyth** as proxies. They track Chainlink within a few dollars, but
-the basis near the window boundary can flip an outcome. Before trusting any
-edge, compare each proxy against the official `resolved_outcome`. A Chainlink
-adapter is a clean future drop-in in `feeds.py`.
+Each market settles on the **Chainlink <COIN>/USD data stream** (auth-gated). We log,
+**per coin**, its **Binance spot** (primary proxy — drives strike/final/`our_outcome`)
+and its **Pyth** feed: `feeds.fetch_binance(symbol)` / `feeds.fetch_pyth(pyth_id)`, both
+resolved per-coin via `coins.py`. They track Chainlink within a few dollars, but the
+basis near the boundary can flip an outcome. Before trusting any edge, compare each proxy
+against the official `resolved_outcome`. (Note: `fetch_pyth` was once hardcoded to BTC —
+it is now per-coin, so alt `btc_pyth` columns finally hold the right asset.) A Chainlink
+adapter is a clean future drop-in.
 
 ## Architecture
 
 | File | Role |
 |------|------|
-| `feeds.py` | Data sources: Gamma (market metadata + official resolution), CLOB (`/book` per outcome token = the odds), Binance, Pyth. All stdlib HTTP. |
-| `storage.py` | SQLite schema + writers. Tables: `windows`, `snapshots` (REST) + `book_events`, `trades`, `btc_ticks` (WS). |
-| `collector.py` | REST loop + fallback: discover live window → snapshot → capture strike/final → settle closed windows. Tunables are constants at the top. |
-| `ws_collector.py` | Async WebSocket layer: market-channel events + Binance bookTicker → buffered batch writes. Watchdog reconnect. Needs `websockets`. |
-| `peek.py` | Read-only CLI inspection (`python peek.py`, `python peek.py windows`). |
-| `viewer.py` | Live browser dashboard (stdlib http.server) at `http://127.0.0.1:8765`. Read-only. |
+| `coins.py` | **Coin registry + path authority.** Per-coin slug prefix / Binance symbol / Pyth id; `live_db`/`archive_dir`/`all_dbs`/`ensure_dirs`; `ENABLED`; `default_coin()` (env `ANALYSIS_COIN`). Legacy BTC fallback. |
+| `feeds.py` | Data sources: Gamma (metadata + resolution), CLOB (`/book` = odds), Binance, Pyth. `slug_for/fetch_market(ws, coin)`, `fetch_binance(symbol)`, `fetch_pyth(pyth_id)`. Stdlib HTTP. |
+| `storage.py` | SQLite schema + writers (coin-agnostic; opens whatever path it's given). Tables: `windows`, `snapshots` (REST) + `book_events`, `trades`, `btc_ticks` (WS). `prune_ws` retention. |
+| `collector.py` | REST loop + fallback, **`--coin`**: discover live window → snapshot → strike/final → settle. Writes `data/<coin>/live.db`. |
+| `ws_collector.py` | Async WebSocket layer, **`--coin`**: market-channel events + Binance bookTicker → buffered writes; watchdog reconnect; per-coin `RETAIN_DAYS` prune. Needs `websockets`. |
+| `supervisor.py` | Launches + auto-restarts a collector pair **per `coins.ENABLED`** (windowless on Windows) + viewer + chart_capture. Stop via Ctrl-C or a `STOP` file. |
+| `migrate_to_data_layout.py` | One-time move of legacy `btc_updown.db`/`old_dbs/` → `data/btc/`. |
+| `peek.py` | Read-only CLI inspection, **`--coin`** (`python peek.py --coin eth [windows]`). |
+| `viewer.py` | Live browser dashboard (stdlib http.server, default `:8765`). Honors `ANALYSIS_COIN`. Read-only. |
+| `chart_capture.py` | Per-round price charts, **`--coin`** → `round_charts/<coin>/`. Supervisor child. |
+| `analyze_all.py` | Run exit maps + round charts for many coins at once, organized per coin. |
 
-### Data model (`btc_updown.db`, SQLite — gitignored)
+### Data model (per coin: `data/<coin>/live.db`, SQLite — gitignored; one DB per coin, identical schema)
 
 - **`windows`** — one row per 5-min market: `window_start` (PK, == slug ts),
   `token_up`/`token_down`, `strike_binance`/`strike_pyth` (price at start),
@@ -102,19 +147,23 @@ Outcome token order: `outcomes` is `["Up","Down"]`, so `clobTokenIds[0]` = Up,
 
 ## Run / verify
 
-Run BOTH collectors (separate processes, same DB):
+Normally just run the supervisor — it launches a collector pair per enabled coin
+(windowless) plus the viewer + chart_capture, and restarts any that die:
 ```sh
 pip install -r requirements.txt   # installs websockets (for ws_collector only)
-python collector.py               # REST fallback + windows/strike/resolution
-python ws_collector.py            # WebSocket high-fidelity stream
-python peek.py                    # summary incl. ws stream counts
-python peek.py windows            # one row per 5-min market
+python supervisor.py              # ALL enabled coins; stop via Ctrl-C or a STOP file
+# ...or a single coin by hand:
+python collector.py --coin eth
+python ws_collector.py --coin eth
+python peek.py --coin eth          # summary incl. ws stream counts
+python peek.py --coin eth windows  # one row per 5-min market
 ```
 
-NOTE: the WS feed is high-volume (order of ~10s of GB/day of `book_events` raw
-deltas in an active market). If a retention/compaction policy exists, respect it;
-if not and disk is a concern, that's the first thing to add (keep `trades` +
-window summaries long-term, prune/compress raw `price_change` payloads after N days).
+NOTE: the WS feed is high-volume (~10s of GB/day of `book_events` per active coin, so
+~6× across all six). Retention EXISTS: `ws_collector`'s `pruner` calls
+`storage.prune_ws` to drop `book_events`/`btc_ticks` older than `RETAIN_DAYS` (default 3)
+per coin; `windows`/`snapshots`/`trades` are kept long-term. Watch free space — lower
+`RETAIN_DAYS` or trim `coins.ENABLED` if disk gets tight.
 
 A short `timeout`/Ctrl-C run is enough to smoke-test; if a run crosses a
 :00/:05/... boundary you'll see the auto-switch (a new `windows` row + odds reset).
@@ -127,10 +176,19 @@ A short `timeout`/Ctrl-C run is enough to smoke-test; if a run crosses a
 - Tunables (poll cadence, tail behavior, DB path) live as constants at the top of
   `collector.py`. Prefer adjusting those over hard-coding.
 
-## Likely next phases (when the user asks)
+## Research state (read before proposing strategy work)
 
-1. Let it collect for a while, then build an **analysis** script/notebook:
-   load to pandas, label each window, study odds-vs-time and strike-vs-price
-   dynamics, look for the limit-order edge.
-2. Add a **Chainlink** price adapter to `feeds.py` to match resolution exactly.
-3. Only after an edge is validated: a separate execution/trading layer.
+The full strategy-research log is in **`EXPERIMENTS.md`** (+ agent memory). Short version,
+on BTC: **no profitable retail edge found.** Passive resting-limit variants die to adverse
+selection. The fair-value **TAKER** has a real ~1s lead over the quote, but the bid-ask
+spread caps it at ~breakeven and Polymarket's confirmed dynamic **taker fee**
+(`crypto_fees_v2`, ~3.5%+/stake on the 5-min market) sinks it net-negative. The market is
+**efficient on knowledge** (price Brier ~0.12; recent trend predicts the outcome but the
+price already prices it). All measured with window-clustered bootstrap CIs.
+
+Current direction: **cross-asset / SMT across the six coins** — do sleepier alts lag, or
+lead each other, enough to clear the fee? That is *why* the multi-coin collection exists.
+`live_runner.py` stays **gated** and must NOT be armed until an edge clears validation.
+
+Future drop-ins (when asked): a **Chainlink** price adapter in `feeds.py` to match
+resolution exactly; verified alt-specific tooling.
