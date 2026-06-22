@@ -10,6 +10,7 @@ __pycache__/
 .venv/
 STOP
 exit_maps/
+matrix/
 round_charts/*.png
 round_charts/**/*.png
 signals.json

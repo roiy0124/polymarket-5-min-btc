@@ -65,6 +65,15 @@ def ask_scope(unit="days"):
     return {"BTC_ANALYSIS_DAYS": ask("how many days", 7)}
 
 
+def ask_coins():
+    """Which coins to process: ALL six (default) or one."""
+    print(f"\n  coins:  [1] ALL ({', '.join(coins.ENABLED)})   [2] pick one")
+    if (input("  coins [1]: ").strip() or "1") != "2":
+        return list(coins.ENABLED)
+    c = input(f"  which ({'/'.join(coins.ENABLED)}): ").strip().lower()
+    return [c] if c in coins.COINS else list(coins.ENABLED)
+
+
 def _launch_supervisor():
     flags = 0
     if os.name == "nt":
@@ -94,12 +103,29 @@ def a_status():
 
 def a_peek():         run([PY, "peek.py"])
 def a_peek_windows(): run([PY, "peek.py", "windows"])
-def a_round_charts(): run([PY, "chart_capture.py", "--once"])
 def a_selftest():     run([PY, "-m", "exec_engine.selftest"])
 
 
+def a_round_charts():
+    sel = ask_coins()
+    for c in sel:
+        run([PY, "chart_capture.py", "--coin", c, "--once"], pause=False)
+    input("\n[Enter] to return to the menu ")
+
+
 def a_exit_maps():
-    run([PY, "-m", "analysis.exit_maps"], env_extra=ask_scope())
+    env = ask_scope()
+    sel = ask_coins()
+    for c in sel:
+        run([PY, "-m", "analysis.exit_maps", "--coin", c], pause=False, env_extra=env)
+    input("\n[Enter] to return to the menu ")
+
+
+def a_matrix():
+    sel = ask_coins()
+    for c in sel:
+        run([PY, "make_matrix.py", "--coin", c], pause=False)
+    input("\n[Enter] to return to the menu ")
 
 
 def a_calibration():
@@ -276,8 +302,9 @@ MENU = [
     ("3", "Peek -- windows table", a_peek_windows),
     ("4", "Open live dashboard (browser)", a_dashboard),
     ("VISUALS", None),
-    ("5", "Generate exit maps (per entry price)", a_exit_maps),
-    ("6", "Generate round charts (backfill)", a_round_charts),
+    ("5", "Generate exit maps (per entry price; all coins or one)", a_exit_maps),
+    ("6", "Generate round charts (backfill; all coins or one)", a_round_charts),
+    ("m", "Matrix montages (side-by-side grids of all graphs)", a_matrix),
     ("ANALYSIS", None),
     ("7", "Phase-1 SIGNAL FINDER (win/ROI floors -> signals.json)", a_signals),
     ("8", "Calibration test (price vs outcome)", a_calibration),
