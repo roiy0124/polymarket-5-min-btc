@@ -130,6 +130,12 @@ are folded into "Strategies tried" below):
 
 ## Where it stands / next steps
 
+- **VERDICT (2026-06-22): no retail edge on this 5-min market as it stands.** Knowledge is
+  priced (market efficient: position + trend, Brier ~0.12). The one inefficiency (~1s latency)
+  is spread-capped AND — **confirmed live** — the 5-min market carries the dynamic **taker fee**
+  (`feeSchedule` rate 0.07, takerOnly, p(1-p): ~3.5%+/stake), which sinks the retail taker. The
+  fee-exempt **maker** side is the adverse-selected passive branch; the 20% maker rebate is far
+  too small to offset it. All three avenues (know / take / make) are walled.
 - **Live direction = the fair-value TAKER.** `experiment_lookahead_taker.py` (with
   window-clustered bootstrap CIs) answered the two open questions: **Q1** a faster feed is
   *significantly* worth money (~+0.006 EV/$1 per second of lead, saturating ~2s), but the
