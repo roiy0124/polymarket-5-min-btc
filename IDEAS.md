@@ -31,7 +31,7 @@ of the exchanges, so it can't beat them on speed; it's only relevant for settlem
 - ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
 - **D. Settlement-basis edge (Chainlink vs Binance)** — 🟢 discussed; free-only (replicate Chainlink), gated on disagreement-rate
 - **E. Maker-rebate harvesting at the tails** — 🟡 discussed → ruled out standalone; rebate kept as a net-EV +term
-- F. Multi-coin as a measurement multiplier (meta) — ⚪ queued
+- **F. Multi-coin as a measurement multiplier (meta)** — 🟢 discussed → ADOPT as standard evaluation methodology
 
 ## D. Settlement-basis edge (Chainlink vs Binance/Pyth)
 
@@ -110,6 +110,39 @@ maker-rest exit in idea A). It's a marginal contributor, not a strategy.
 
 **Decision:** ruled out as standalone. Keep `+ maker_rebate(p)` in the net-EV for maker fills
 (small). No separate test.
+
+## F. Multi-coin as a measurement multiplier (meta)
+
+**Status:** discussed 2026-06-23 → **ADOPT as the standard evaluation methodology** (it's not a
+strategy — it's how we test the others). Discussion-only.
+
+**What it is.** Not a trading edge — a force-multiplier on *evaluating* edges. Six coins sharing
+the same structure (same MMs, same fee curve, same 5-min mechanic) let us test any candidate
+edge on **six markets at once**.
+
+**Why it matters — it attacks our #1 chronic problem.** Every result this project produced was
+underpowered / overfit-prone on thin data ("need weeks not days"). Multi-coin helps two ways:
+1. **More samples / tighter CIs** — ~6× windows per unit time ⇒ confirm a marginal edge faster.
+2. **Cross-coin replication = overfit guard** — an edge on BTC but NOT the other 5 is noise; an
+   edge consistent across all 6 is structural. This is the strong, out-of-sample-like test we've
+   lacked (the discipline lessons: sweeps overfit, ±0.05 is the noise band).
+
+**Honest caveat — coins are CORRELATED (~0.64), so 6 ≠ 6× independent.** Effective sample < 6×:
+- *Market-wide* edges (direction/latency): coins highly correlated ⇒ little extra independent
+  info (effective maybe ~2–3×).
+- *Idiosyncratic* edges (idea B's divergence, by definition the non-common part): coins more
+  independent ⇒ bigger multiplier. **So F pairs BEST with B.**
+Also coins differ (liquidity/spread/vol/price-scale) ⇒ pooling assumes a homogeneity that may
+not hold; per-coin estimates guard against it.
+
+**How to apply (standard from now on):**
+- Every edge test reports **PER-COIN + POOLED**; an edge must **replicate across coins** to be
+  believed.
+- **Respect correlation:** cluster CIs by **TIME** (same-time windows across coins are
+  correlated), not just by coin; estimate effective N from the outcome correlation.
+- It **amplifies measurement, doesn't create edge.**
+
+**Decision:** adopt as the evaluation framework for B/D and any future idea. No standalone test.
 
 ## Deferred tech-debt
 - **Price-column naming.** `btc_binance` / `btc_pyth` / `btc_ticks` hold each coin's OWN
