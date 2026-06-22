@@ -195,7 +195,7 @@ def best_sell_window(dots, z):
     return t1, t2, T, win_rate, roi, ev, n
 
 
-def make_plot(side, cent, dots, outpath, admit=True, min_line_n=0):
+def make_plot(side, cent, dots, outpath, admit=True, min_line_n=0, coin="btc"):
     z = cent / 100.0
     fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=85)
     if dots:
@@ -214,7 +214,7 @@ def make_plot(side, cent, dots, outpath, admit=True, min_line_n=0):
     ax.set_ylim(0, 1)
     ax.set_xlabel("entry time (min into the 5-min round)")
     ax.set_ylabel("exit value (sell bounce, else 1=win / 0=loss at resolution)")
-    ax.set_title(f"{side.upper()} token  |  entry @ {cent}c  |  n={len(dots)}")
+    ax.set_title(f"{coin.upper()} {side.upper()} token  |  entry @ {cent}c  |  n={len(dots)}")
 
     # best (buy-window, sell price) sweet spot (max win_rate x ROI): shade the
     # window, draw the SELL line (dots above = win, below = loss), label it, and
@@ -317,7 +317,7 @@ def best_conditional(mdots, z, min_n=30):
     return best
 
 
-def make_margin_plot(side, cent, mdots, z, outpath):
+def make_margin_plot(side, cent, mdots, z, outpath, coin="btc"):
     """The exit map re-plotted against BTC margin, WITH the buy/sell decision drawn on:
       x = BTC gap from strike at entry ($; <0 below)   y = highest sellable value
       color = resolved outcome (green Up / red Down)
@@ -349,9 +349,9 @@ def make_margin_plot(side, cent, mdots, z, outpath):
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#8957e5", alpha=0.9))
     ax.axvline(0, ls=":", lw=1, color="#999", label="strike (gap 0)")
     ax.set_ylim(0, 1)
-    ax.set_xlabel("BTC gap from strike at entry ($)   [<0 = below strike]")
+    ax.set_xlabel(f"{coin.upper()} gap from strike at entry ($)   [<0 = below strike]")
     ax.set_ylabel("highest sellable value (else 1=win / 0=loss at resolution)")
-    ax.set_title(f"{side.upper()} @ {cent}c  |  buy/sell decision vs BTC gap  |  n={len(mdots)}")
+    ax.set_title(f"{coin.upper()} {side.upper()} @ {cent}c  |  buy/sell decision vs gap  |  n={len(mdots)}")
     ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
     ax.grid(True, alpha=0.15)
     fig.tight_layout()
@@ -403,7 +403,8 @@ def main():
                 nonempty += 1
             admit = len(dots) >= threshold
             admitted += int(admit)
-            make_plot(side, cent, dots, os.path.join(sd, f"entry_{cent:02d}c.png"), admit=admit)
+            make_plot(side, cent, dots, os.path.join(sd, f"entry_{cent:02d}c.png"), admit=admit,
+                      coin=args.coin)
         print(f"  {side}: wrote 99 charts ({nonempty} with data, {admitted} admitted) -> {sd}")
     # margin-correlation maps: one per side, per entry-cent that has data
     for side in ("up", "down"):
@@ -415,7 +416,7 @@ def main():
             if not mdots:
                 continue
             make_margin_plot(side, cent, mdots, cent / 100.0,
-                             os.path.join(md, f"entry_{cent:02d}c.png"))
+                             os.path.join(md, f"entry_{cent:02d}c.png"), coin=args.coin)
             wrote += 1
         print(f"  {side}_margin: wrote {wrote} margin-correlation charts -> {md}")
     # margin-FILTERED time maps: keep only dots inside the margin buy-zone, then plot
@@ -440,7 +441,7 @@ def main():
             # floor scales with the map's ORIGINAL size, not a fixed number
             floor = math.ceil(FILT_LINE_FRAC * len(all_dots[(side, cent)]))
             make_plot(side, cent, filt, os.path.join(fd, f"entry_{cent:02d}c.png"),
-                      admit=True, min_line_n=floor)
+                      admit=True, min_line_n=floor, coin=args.coin)
             wrote += 1
         print(f"  {side}_margin_filtered: wrote {wrote} gap-conditioned time maps -> {fd}")
     print(f"done [{args.coin}]. {len(windows)} settled windows. map admission floor: "

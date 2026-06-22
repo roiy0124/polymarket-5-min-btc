@@ -39,6 +39,8 @@ import coins
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = coins.live_db("btc")
 OUTDIR = os.path.join(HERE, "round_charts")
+COIN = "btc"                       # set in main() from --coin; used by render() for labels/color
+COLOR = coins.color("btc")
 WINDOW = 300
 INTERVAL = 5.0
 OFFICIAL_FETCH_BELOW = 25.0   # fetch official points when time-left < this (still live)
@@ -90,7 +92,7 @@ def render(conn, ws, official_up=None):
     bx = [x for x, b in zip(xs, btc) if b is not None]
     by = [b for b in btc if b is not None]
     if by:
-        ax2.plot(bx, by, color="#f0883e", lw=1.3, label="BTC price", zorder=4)
+        ax2.plot(bx, by, color=COLOR, lw=1.3, label=f"{COIN.upper()} price", zorder=4)
         anchors = list(by) + ([strike] if strike else [])
         lo, hi = min(anchors), max(anchors)
         pad = max((hi - lo) * 0.35, 3.0)
@@ -98,13 +100,13 @@ def render(conn, ws, official_up=None):
         if strike:
             ax2.axhline(strike, ls="--", color="#d4a017", lw=1.2,
                         label=f"target / strike  {strike:.0f}")
-        ax2.set_ylabel("BTC price (USD)", color="#f0883e")
-        ax2.tick_params(axis="y", labelcolor="#f0883e")
+        ax2.set_ylabel(f"{COIN.upper()} price (USD)", color=COLOR)
+        ax2.tick_params(axis="y", labelcolor=COLOR)
         ax2.ticklabel_format(axis="y", style="plain", useOffset=False)
 
     outc = official_outcome or our or "pending"
     t = datetime.fromtimestamp(ws, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-    sub = f"  |  BTC {strike:.0f} -> {final:.0f}" if (strike and final) else ""
+    sub = f"  |  {COIN.upper()} {strike:.0f} -> {final:.0f}" if (strike and final) else ""
     ax.set_title(f"{t} UTC   resolved: {outc}{sub}")
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
@@ -129,11 +131,13 @@ def backfill(conn):
 
 
 def main():
-    global OUTDIR, DB_PATH
+    global OUTDIR, DB_PATH, COIN, COLOR
     ap = argparse.ArgumentParser(description="per-round price charts for one coin")
     ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS))
     ap.add_argument("--once", action="store_true", help="backfill existing windows and exit")
     args = ap.parse_args()
+    COIN = args.coin
+    COLOR = coins.color(args.coin)
     if plt is None:
         print("chart_capture: matplotlib not installed -> charts disabled "
               "(`pip install matplotlib`). Idling so the supervisor doesn't crash-loop.",
