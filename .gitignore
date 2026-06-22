@@ -4,6 +4,7 @@
 *.log
 *.out.log
 *.err.log
+logs/
 __pycache__/
 *.pyc
 .venv/

@@ -24,6 +24,8 @@ import coins
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STOP_FILE = os.path.join(HERE, "STOP")
+LOGS_DIR = os.path.join(HERE, "logs")          # all child .out.log/.err.log live here
+os.makedirs(LOGS_DIR, exist_ok=True)
 PY = sys.executable
 
 # One REST + one WebSocket collector per enabled coin (each writes its own
@@ -55,8 +57,8 @@ class Child:
         self.next_start = 0.0
         self.started_at = 0.0
         self.restarts = 0
-        self.out = open(os.path.join(HERE, f"{name}.out.log"), "a", buffering=1, encoding="utf-8")
-        self.err = open(os.path.join(HERE, f"{name}.err.log"), "a", buffering=1, encoding="utf-8")
+        self.out = open(os.path.join(LOGS_DIR, f"{name}.out.log"), "a", buffering=1, encoding="utf-8")
+        self.err = open(os.path.join(LOGS_DIR, f"{name}.err.log"), "a", buffering=1, encoding="utf-8")
 
     def start(self):
         self.out.write(f"\n--- supervisor start {_ts()} ---\n")
