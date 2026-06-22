@@ -14,7 +14,7 @@ only then build a test. An idea graduates to `EXPERIMENTS.md` once it's been mea
 4. Plus: **−100% on a miss** (binary), and a real **~1s BTC→quote lag** that is spread-capped.
 
 ## Index (status)
-- **A. Fee-topology: late-window favorites** — 🟢 discussing first (testable on existing BTC data)
+- **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
 - B. Cross-asset lead-lag matrix → laggard taker — ⚪ queued
 - C. Basket-divergence SMT — ⚪ queued
 - D. Settlement-basis edge (Chainlink vs Binance) — ⚪ queued (needs Chainlink data)
@@ -101,11 +101,34 @@ So the open question is the EXIT POLICY. Candidates:
   trade); cost is the full −100% on losers you'd likely lose anyway. Probably dominates (b).
 - hybrids: timeouts, reprice toward mid, partial exits, trailing.
 
-User asked to RESEARCH the recommended way rather than trust instinct. Deep-research launched
-(run `wf_51c2b4d1-413`): exit execution under maker–taker fees, optimal-stopping/take-profit
-under costs, maker-rebate viability + adverse selection by price level, binary hold-to-
-resolution as a fee-free exit, and Polymarket practitioner tactics. **Document the decided
-exit policy here after the research returns + is validated.**
+**Deep-research verdict (2026-06-23, run wf_51c2b4d1-413; 101 agents, 19 sources, 22 verified
+claims; see memory [[exit-execution-verdict]]):**
+- The resting maker SELL is **adversely selected by construction** (winner's curse): fills
+  ~certainly on winners, unfilled on losers; fill prob is *negatively* correlated with
+  outcome. (DeLise 2407.16527; Market Maker's Dilemma 2502.18625; Cont-Kukanov 1210.1625.)
+- **Taker-cross-to-exit (policy b) is the WORST** — it fires precisely on losers (adverse
+  selection moved to the exit) + pays the fee. Justified only under a hard deadline (not us).
+- **REFUTED (0-3):** "sell orders escape the taker fee." Fees are taker-vs-maker, not
+  buy-vs-sell; a crossing sell is a taker and pays. **Only fee-free exit = HOLD to settlement.**
+- No simple price-taking strategy beats this structure (Snowberg-Wolfers, 6.4M races); aligns
+  with our "efficient on knowledge" finding → retail net-positive after the 0.07 fee unlikely.
 
-**Decision:** _pending deep-research synthesis → then encode one net-EV `net_ev(entry, exit,
-entry_mode, exit_mode)` helper and wire it into the signal scorers._
+**DECIDED EXIT POLICY:** rest a **maker sell at the target; if unfilled, HOLD to 0/1
+resolution. NEVER taker-cross to exit.** ⇒ the fee is **moot on exit** (maker = 0, hold = 0);
+it only bites on a taker **ENTRY** (the latency play). So fee-aware net-EV = charge
+`0.07·a·(1−a)` on taker entries only; model the maker-sell fill as **outcome-conditional**
+(winner's curse), plus the −100% on held losers. Our existing exit-map reach-EV
+(`reach·roi − (1−reach)`) already captures the winner's curse via the price path — just add
+the taker-entry fee and do NOT add a taker-exit fallback.
+
+**net_ev skeleton** (Cont-Kukanov + binary extensions): half-spread + taker fee on crossed
+legs + maker rebate (minus an adverse-selection penalty) + asymmetric under/over-fill
+penalties, PLUS a hold-to-0/1 branch and the −100% loss term, PLUS an explicit
+adverse-selection penalty on the maker-sell fill probability.
+
+**Measurements to run (settle the residual value):** (1) empirical outcome-conditional fill
+rate + win rate of a resting sell at target on these 5-min markets; (2) the (p, time-left,
+signal-win-prob) grid where hold-to-resolution beats any taker exit.
+
+**Status:** ✅ exit policy decided + documented. Next: encode `net_ev(entry, exit, entry_mode,
+exit_mode)` (taker-entry fee; maker-or-hold exit; −100% term) and wire into the signal scorers.
