@@ -15,8 +15,8 @@ only then build a test. An idea graduates to `EXPERIMENTS.md` once it's been mea
 
 ## Index (status)
 - **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
-- **B. Cross-asset lead-lag → laggard taker** — 🟢 discussing now
-- C. Basket-divergence SMT — ⚪ queued
+- **B. Cross-asset divergence scan (SMT)** — 🟢 design agreed; B1 simple existence test next (absorbs C)
+- ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
 - D. Settlement-basis edge (Chainlink vs Binance) — ⚪ queued (needs Chainlink data)
 - E. Maker-rebate harvesting at the tails — ⚪ queued
 - F. Multi-coin as a measurement multiplier (meta) — ⚪ queued
@@ -140,11 +140,12 @@ exit_mode)` (taker-entry fee; maker-or-hold exit; −100% term) and wire into th
 **Status:** discussing (2026-06-23). Needs more alt data to test the EV; the lead-lag *matrix*
 is testable sooner. This is the pairwise version of SMT; idea C is its basket generalization.
 
-**Core hypothesis.** A leader coin (BTC, or whichever the data says) leads the alts. When the
-leader moves, (1) the alt's *underlying* price follows within seconds, and (2) the alt's
-*Polymarket quote* follows even **later**, because alt markets are sleepier / less contested.
-So a bot that sees the leader move can take the alt's **stale quote** before it reprices — a
-**taker entry on a genuine cross-asset information edge** (LONG the option, unlike passive).
+**Core hypothesis (refined w/ user 2026-06-23).** NO fixed leader and NO fixed coin to trade.
+We **scan all six coins continuously and compare their moves**. Crypto is highly correlated, so
+when one coin's *market* hasn't moved in line with its peers (a divergence **GAP**), that coin's
+quote is stale → we act on *whichever* coin shows the gap, in *whichever* direction. (This
+**absorbs the old idea C "basket divergence" — same thing**, just stated as a live scan.) It's a
+**taker entry on a cross-asset information gap**, exit maker-rest-or-hold (idea A).
 
 **Two lead-lag layers (keep them separate):**
 - *Underlying* lead-lag: does BTC's price lead ETH/SOL/XRP/DOGE/BNB's price? (Crypto is highly
@@ -166,29 +167,31 @@ The make-or-break is whether **lag-capture > spread + fee** on any coin. Likely 
 liquid alts (ETH/SOL) are tradeable; the sleepiest (DOGE/XRP/BNB) may lag most but be
 un-crossable. The data decides.
 
-**Test plan (in order; first step is ~data-ready):**
-1. **Underlying lead-lag matrix** — 6×6 cross-correlation of 1s **% returns** (scale-normalized)
-   between coins' Binance prices, swept over lags. Identifies leader→laggard pairs + peak lag.
-   Cheap; needs only a few hours of multi-coin ticks (have some).
-2. **Per-coin quote lag** — each alt's Polymarket-mid lag vs its own underlying (reuse the
-   lookahead lead-lag tool). Which alts lag longest?
-3. **Cross-asset residual test** — does the leader's recent move predict the laggard's OUTCOME
-   *beyond* the laggard's market price? `corr(leader_move, alt_outcome − alt_price)`. >0 (CI
-   excludes 0) ⇒ the alt underreacts to the leader ⇒ edge. (Mirrors `experiment_trend_outcome`.)
-4. **Net-EV taker sim** — when the leader moves enough, take the alt's stale quote (taker
-   entry, pay fee), exit maker-rest-or-hold (idea-A policy); window-clustered CIs; explicitly
-   net of the **alt spread**. This is where `net_ev` gets built.
+**Testing philosophy (user):** start with the SIMPLEST test with the FEWEST moving parts —
+just check whether the SMT gap EXISTS and carries information — *before* layering in spread/
+fee/fill realism. **24h of data is enough for first conclusions.**
+
+**B1 — does the gap exist & inform? (simple; ~24h; NO cost modeling yet):**
+1. *SMT prerequisite* — pairwise correlation of the coins' 1s **% returns** (do they move
+   together at all? high corr ⇒ divergences are meaningful). Optional: peak lag per pair.
+2. *Convergence* — define each coin's GAP at time t = (peer-consensus recent %move) − (that
+   coin's own recent %move); test whether the gap predicts the coin's **forward** move (does the
+   laggard catch up?): `corr(gap, forward_return) > 0`. Underlying-only — no market data needed.
+3. *Beyond the price* — does the gap predict the coin's OUTCOME **residual** (`outcome − up_mid`)?
+   i.e., is the gap NOT already in the quote? (the only part needing snapshots.) >0 with CI
+   excluding 0 ⇒ a real, **unpriced** SMT margin.
+   → if B1 is flat: gap already priced, or coins don't diverge informatively → stop.
+   → if B1 is positive: proceed to B2.
+
+**B2 — is it tradeable? (the realistic layer, DEFERRED until B1 is positive):** net-EV taker
+sim — take the laggard's stale quote, net of the **alt spread** + taker fee (idea-A `net_ev`),
+maker-rest-or-hold exit, window-clustered CIs. This is where the crux (is spread > lag?) is decided.
 
 **Risks / kill-criteria:** (a) alt markets as efficient as BTC's → residual ~0; (b) alt spread
 + thinness eats the lag (the crux); (c) leader→laggard relationship time-varying / breaks on
 alt-idiosyncratic moves; (d) fee needs a fat dislocation.
 
-**Open questions for discussion:**
-1. Leader choice — BTC only, or the best leader per the matrix (could be ETH/SOL)? (I'd let the
-   matrix decide.)
-2. We must measure the **net** (lag-capture − spread − fee), not just the lag — agree the crux
-   is the spread/liquidity of the sleepy alts?
-3. Scope now: run the **underlying lead-lag matrix** soon (data-light) and defer the residual/
-   EV tests until alts have ~days of windows?
-
-**Decision:** _pending discussion._
+**Decision (2026-06-23):** design agreed — scan-and-compare (no fixed leader/target; absorbs C);
+**B1 simple existence test first** (correlation prerequisite + gap→convergence + gap→outcome-
+residual, no cost modeling), on ~24h of data; **B2 net-of-spread taker sim deferred** until B1
+is positive. Build B1 once ~24h of multi-coin data is in (BTC is ready now; alts ~half a day).
