@@ -6,15 +6,18 @@ results are **negative or near-breakeven**, and that is the point: each idea was
 killed (or kept) cheaply by measurement instead of expensively by trading.
 
 > **One-line state:** the **passive resting-limit** family is a confirmed dead end
-> (adverse selection; the last +0.02 nested lead was a guard artifact → breakeven with the
-> live-matching guard). The **fair-value TAKER** is now tested and is the live direction:
-> `experiment_lookahead_taker.py` shows **BTC LEADS the Polymarket quote by ~1s** (lead-lag
-> cross-corr peaks at L=+1s, r=0.36, sharp) and a faster feed lifts taker EV **monotonically**
-> with look-ahead Δ — your-feed-speed *is* a real lever. The remaining wall is **execution**:
-> crossing the spread to exit costs more than 1–3s of lead recovers, so pooled catch-up EV is
-> ~−0.01..−0.02; only the clean cut (1-per-window, big dislocations, tight exit) reaches
-> **+0.009/$1 at the clairvoyant upper bound**. Next levers: a genuinely faster BTC feed +
-> **maker-exit** (earn the spread, don't cross it), then weeks of data.
+> (adverse selection; the last +0.02 nested lead was a guard artifact → breakeven). The
+> **fair-value TAKER** is the live direction and is now measured WITH window-clustered
+> bootstrap CIs (`experiment_lookahead_taker.py`). Findings: **BTC LEADS the Polymarket
+> quote by ~1s** (lead-lag peak L=+1s, r=0.36, sharp), and a faster feed is **provably worth
+> money** — the EV lift over the no-advantage control is significant at every lead (~**+0.006
+> EV/$1 per second**, saturating by ~2s). BUT the **bid-ask spread is the dominant cost**: the
+> taker→maker exit gap (~+0.008..+0.011) is *bigger than the feed lift*, and at the clairvoyant
+> UPPER BOUND feed-speed + maker-exit only reach **~breakeven** (`+0.000 [−0.001,+0.002]`). No
+> clean **time-of-day** gate (every hour's CI straddles/below 0) and high-vol is NOT best
+> (it widens the spread); mid-vol is least-bad. So the structure is right but the lag is too
+> small to clear the spread on this data. Ranked levers: **maker-exit > faster feed > (no)
+> regime gate**; then weeks of data.
 
 ---
 
@@ -68,7 +71,7 @@ are folded into "Strategies tried" below):
 | `experiment_combined.py` | **(shared lib)** two-screen (exit-line AND gap-response); exports `load_full` / `train_dots` | both-screens > parts, but ~breakeven |
 | `experiment_config_tod.py` | config brute-force × time-of-day, 30-min cadence, **live-matching guard** | DECISIVE: nested +0.02 was a **guard artifact**; corrected guard → EV/fill ≈ **0.00** (breakeven), no edge |
 | `experiment_lookback_sweep.py` | sweet-spot 3-lookback combo + robustness gate, baseline vs nested, **live-matching guard** | passive nested ≈ breakeven once the guard matches the executor |
-| `experiment_lookahead_taker.py` | **FASTER-FEED test** (the live one). (A) lead-lag cross-corr BTC vs Polymarket Up-mid; (B) clairvoyant-Δ taker, catch-up vs hold exit, Δ∈{0,.5,1,2,3}s, costed (cross the spread) | **BTC LEADS Polymarket by ~1s (r=0.36, sharp).** Taker EV rises **monotonically** with Δ — feed speed *is* a real lever. But the **spread you cross is the wall**: pooled catch-up ≈ −0.01..−0.02; only the clean cut (1-per-window, big dislocations edge≥0.08, exit 1s) flips to **+0.009/$1** at full clairvoyance. Edge structure EXISTS; binding constraint is now execution/spread, not signal |
+| `experiment_lookahead_taker.py` | **FASTER-FEED test** (the live one), window-clustered bootstrap CIs. (A) lead-lag cross-corr; (B) **Q1 value of real-time**: clairvoyant-Δ taker, bid(taker) vs mid(maker) exit, Δ∈{0,.5,1,2,3}s, lift-vs-Δ0 CI; (C) **Q2 when**: EV by 3h-UTC hour + by BTC-vol tercile | **BTC LEADS by ~1s (r=0.36).** Q1: feed lift **significant at every lead** (~+0.006/$1 per sec, saturates ~2s) — faster feed provably worth money. BUT **spread dominates**: taker exit −0.011..−0.020, maker(mid) −0.001..−0.009; the taker→maker gap (>feed lift) means **maker-exit is the bigger lever**. At the **clairvoyant upper bound**, feed+maker ≈ **breakeven** (`+0.000[−0.001,+0.002]`). Q2: **no clean hour** (all CIs straddle/below 0); **high-vol NOT best** (widens spread), mid-vol least-bad. Structure right, lag too small to clear the spread on this data |
 
 ---
 
@@ -92,12 +95,16 @@ are folded into "Strategies tried" below):
    guard artifact → breakeven with the live-matching guard.
 9. **BTC spike-reversion** (side idea) — no systematic reversion; dead.
 10. **Fair-value TAKER / faster feed** (the pivot away from passive) — *the first
-    structurally-sound positive signal.* Lead-lag cross-corr proves **BTC leads the
-    Polymarket quote by ~1s** (r=0.36); a faster feed lifts taker EV **monotonically**
-    with look-ahead. But exiting by crossing the spread eats it (pooled ~−0.01..−0.02);
-    only the clean cut reaches +0.009/$1 at the clairvoyant upper bound. The constraint
-    moved from *signal* (passive: none) to *execution* (taker: spread). Levers left: a
-    real faster feed + **maker exit** (rest at new fair, earn the spread).
+    structurally-sound signal,* now measured with window-clustered CIs. Lead-lag proves
+    **BTC leads the quote by ~1s** (r=0.36). **Q1:** a faster feed is **provably worth
+    money** — the lift over the no-advantage control is significant at every lead (~+0.006
+    EV/$1 per second, saturating ~2s). **But the spread dominates:** exiting as a taker is
+    −0.011..−0.020, as a maker −0.001..−0.009, and the taker→maker gap is *bigger than the
+    feed lift* → **maker-exit is the #1 lever, faster feed #2.** At the clairvoyant UPPER
+    BOUND the two together only reach ~**breakeven**. **Q2:** **no clean time-of-day** edge
+    (every hour's CI straddles/below 0) and **high-vol is not best** (it widens the spread);
+    mid-vol is least-bad. Verdict: structure correct, lag too small to clear the spread on
+    this data; needs maker-exit + a real (sub-clairvoyant) fast feed + weeks of data.
 
 ---
 
@@ -118,16 +125,18 @@ are folded into "Strategies tried" below):
 
 ## Where it stands / next steps
 
-- **Live direction = the fair-value TAKER.** `experiment_lookahead_taker.py` confirmed
-  the BTC→Polymarket lag (~1s, r=0.36) and that feed speed lifts taker EV monotonically.
-  The binding constraint is now the **exit spread**, not signal. Open work, in order:
-  (1) **maker-exit** model — instead of selling at the bid (crossing), rest a limit at the
-  freshly-repriced fair and *earn* the half-spread (with a realistic fill prob); this is
-  the single change most likely to push pooled EV positive. (2) Source a **genuinely
-  faster BTC feed** (Binance WS is already logged sub-second; the clairvoyant Δ was an
-  upper bound — measure the *real* achievable lead vs the quote). (3) Selectivity: trade
-  only large, fresh dislocations (edge≥0.08, first-per-window) where the move clears the
-  spread. (4) **Net of fees** + over **weeks**.
+- **Live direction = the fair-value TAKER.** `experiment_lookahead_taker.py` (with
+  window-clustered bootstrap CIs) answered the two open questions: **Q1** a faster feed is
+  *significantly* worth money (~+0.006 EV/$1 per second of lead, saturating ~2s), but the
+  **bid-ask spread dominates** and even the clairvoyant upper bound only reaches breakeven;
+  **Q2** there is **no clean time-of-day or vol gate** (high-vol widens the spread). The
+  binding constraint is the **exit spread**, not signal and not timing. Open work, in order:
+  (1) **maker-exit fill model** — the headline mid-exit assumes we capture half the spread;
+  model a realistic *fill probability* for resting a limit at the repriced fair (truth is
+  between the bid and mid columns). This is the #1 lever. (2) Measure the **real achievable
+  feed lead** vs the quote (Binance WS is logged sub-second; the clairvoyant Δ is a ceiling —
+  how much of it can a real loop capture?). (3) **Net of fees/gas** + over **weeks**. (4) If
+  still sub-breakeven after (1)-(2), the honest call is that retail can't clear the spread here.
 - **Passive branch: closed.** No edge survives realistic fills (adverse selection).
 - **Deferred:** the **loss-stop** (needs full price path; pairs with the high-win multi-TF
   line) — only relevant if a passive variant is ever revived.
