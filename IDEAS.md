@@ -25,6 +25,14 @@ Corollary on the **TIME/SPEED edge** (a recurring want): the fastest *free* pric
 of the exchanges, so it can't beat them on speed; it's only relevant for settlement *correctness*
 (idea D). No paid streams (if a paid feed gave a clean edge it'd already be standard).
 
+**Prediction, not trading (the translation principle).** This is **outcome prediction** of a
+binary 0/1, not continuous-P&L trading. Any trading strategy (SMT, pairs, ICT, order-flow,
+momentum…) is only useful here if, once translated, its signal **predicts the binary OUTCOME
+better than the token PRICE already does** — a positive **residual** `corr(signal, outcome −
+price)`, net of fees, ideally replicating across coins (idea F). Predicting *direction* is
+worthless if the price has it. This is how we judge every candidate — exactly how SMT became
+idea B. (Strategy-survey deep research in flight: run `wf_28066528-bb1` → will spawn ideas G+.)
+
 ## Index (status)
 - **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
 - **B. Cross-asset divergence scan (SMT)** — 🟢 design agreed; B1 simple existence test next (absorbs C)
