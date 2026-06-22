@@ -5,15 +5,16 @@ What we tried to find a profitable limit-order strategy on Polymarket "BTC Up/Do
 results are **negative or near-breakeven**, and that is the point: each idea was
 killed (or kept) cheaply by measurement instead of expensively by trading.
 
-> **One-line state:** on ~3 days of data, **no profitable edge** for a passive
-> resting-limit strategy. Adverse selection is the structural wall. The last apparent
-> lead (nested gap→time + 24h ≈ +0.02 EV/$1) turned out to be a **GUARD ARTIFACT**:
-> with the corrected, live-matching guard (floor scaled to the lookback-window dots,
-> not all history) the nested approach admits ~5× more fills (n≈1,300) and the EV
-> **regresses to ≈ breakeven (0.00), net-negative after fees** — no edge. The bottleneck
-> is **data volume + structure**, not config tuning; every honest result ends at "need
-> weeks, not days," and the structurally-different **fair-value taker** remains the only
-> untried candidate for a real edge.
+> **One-line state:** the **passive resting-limit** family is a confirmed dead end
+> (adverse selection; the last +0.02 nested lead was a guard artifact → breakeven with the
+> live-matching guard). The **fair-value TAKER** is now tested and is the live direction:
+> `experiment_lookahead_taker.py` shows **BTC LEADS the Polymarket quote by ~1s** (lead-lag
+> cross-corr peaks at L=+1s, r=0.36, sharp) and a faster feed lifts taker EV **monotonically**
+> with look-ahead Δ — your-feed-speed *is* a real lever. The remaining wall is **execution**:
+> crossing the spread to exit costs more than 1–3s of lead recovers, so pooled catch-up EV is
+> ~−0.01..−0.02; only the clean cut (1-per-window, big dislocations, tight exit) reaches
+> **+0.009/$1 at the clairvoyant upper bound**. Next levers: a genuinely faster BTC feed +
+> **maker-exit** (earn the spread, don't cross it), then weeks of data.
 
 ---
 
@@ -57,18 +58,17 @@ conditional EV), `entry_and_exit` / `entry_margin` (per-window dot + its BTC gap
 
 ## Experiment scripts (standalone, NOT in the menu; all read merged `old_dbs/`)
 
+Live now (after a cleanup that removed 7 dead-end orphans — `refresh`, `config_sweep`,
+`window_features`, `multitf`, `nested`, `nested_tod`, `spike_reversion`; their findings
+are folded into "Strategies tried" below):
+
 | Script | Approach | Key finding |
 |---|---|---|
-| `experiment_refresh.py` | live PAPER decay test, refresh signals every 30 min | signals decay fast (~1h after generation); overfit signature |
-| `experiment_walkforward.py` | walk-forward OOS backtest (generate-before-T, trade-after); `open_merged()` unions live+archive DBs | realistic fills ≈ −0.4 EV/fill; exit-map win% doesn't survive |
-| `experiment_config_sweep.py` | per-block brute force: config static-vs-dynamic + fixed REF + market conditions; `--end-ts` pins identical windows | config/lookback are 2nd-order; **config adaptation HURTS** (static > dynamic); regime (time) looked dominant but later shown unstable |
-| `experiment_window_features.py` | per-window winner-vs-loser feature analysis | volume / BTC-move / hour separate winners from losers but **cap at breakeven** |
-| `experiment_multitf.py` | 24h-anchored, damped, shorten-only multi-timeframe line | raises win% to ~46% but **EV flat** (win-for-ROI trade); pairs with a loss-stop |
-| `experiment_combined.py` | two-screen (exit-line AND gap-response) decision | both-screens > parts, but ~breakeven |
-| `experiment_nested.py` | NESTED: gap zone → filter → time line (the real strat), vs baseline | looked great at **6h cadence** (nested −0.06 vs baseline −0.25)… |
-| `experiment_nested_tod.py` | nested at **30-min cadence**, broken by time-of-day | …but **cadence-fragile**: at 30-min nested −0.09 ≈ baseline −0.06. Refresh > nesting. **No clean time-of-day edge** (night≈day≈−0.1) |
-| `experiment_spike_reversion.py` | do big instant BTC moves mean-revert? (move/revert window sweep) | **No.** ~half keep going, median retrace ≈ 0 at 10–120s scales. The vivid reverting charts were selection bias |
-| `experiment_lookback_sweep.py` | sweet-spot 3-lookback combo from {24,16,8,6,4}h + robustness gate, baseline vs nested, entry from 5c | baseline: no sweet spot (all ~−0.1). nested + **24h anchor**: consistent **+0.01..+0.02** (6 combos agree) — most coherent positive yet; the 3-lookback **robustness gate** drove it. Marginal, gross of fees, unconfirmed |
+| `experiment_walkforward.py` | **(shared lib)** walk-forward OOS backtest; `open_merged()` / `replay_leg()` / `generate_signals()` reused by the others | realistic fills ≈ −0.4 EV/fill; exit-map win% doesn't survive |
+| `experiment_combined.py` | **(shared lib)** two-screen (exit-line AND gap-response); exports `load_full` / `train_dots` | both-screens > parts, but ~breakeven |
+| `experiment_config_tod.py` | config brute-force × time-of-day, 30-min cadence, **live-matching guard** | DECISIVE: nested +0.02 was a **guard artifact**; corrected guard → EV/fill ≈ **0.00** (breakeven), no edge |
+| `experiment_lookback_sweep.py` | sweet-spot 3-lookback combo + robustness gate, baseline vs nested, **live-matching guard** | passive nested ≈ breakeven once the guard matches the executor |
+| `experiment_lookahead_taker.py` | **FASTER-FEED test** (the live one). (A) lead-lag cross-corr BTC vs Polymarket Up-mid; (B) clairvoyant-Δ taker, catch-up vs hold exit, Δ∈{0,.5,1,2,3}s, costed (cross the spread) | **BTC LEADS Polymarket by ~1s (r=0.36, sharp).** Taker EV rises **monotonically** with Δ — feed speed *is* a real lever. But the **spread you cross is the wall**: pooled catch-up ≈ −0.01..−0.02; only the clean cut (1-per-window, big dislocations edge≥0.08, exit 1s) flips to **+0.009/$1** at full clairvoyance. Edge structure EXISTS; binding constraint is now execution/spread, not signal |
 
 ---
 
@@ -88,8 +88,16 @@ conditional EV), `entry_and_exit` / `entry_margin` (per-window dot + its BTC gap
    most promising architecture; gap is the strong variable, time the weak one. But the
    apparent edge was **cadence-fragile**.
 8. **Lookback robustness gate** (line must hold across 3 timeframes incl. 24h) — the
-   one filter that nudged nested marginally positive (~+0.02), more selectively.
+   one filter that nudged nested marginally positive (~+0.02); later shown to be the
+   guard artifact → breakeven with the live-matching guard.
 9. **BTC spike-reversion** (side idea) — no systematic reversion; dead.
+10. **Fair-value TAKER / faster feed** (the pivot away from passive) — *the first
+    structurally-sound positive signal.* Lead-lag cross-corr proves **BTC leads the
+    Polymarket quote by ~1s** (r=0.36); a faster feed lifts taker EV **monotonically**
+    with look-ahead. But exiting by crossing the spread eats it (pooled ~−0.01..−0.02);
+    only the clean cut reaches +0.009/$1 at the clairvoyant upper bound. The constraint
+    moved from *signal* (passive: none) to *execution* (taker: spread). Levers left: a
+    real faster feed + **maker exit** (rest at new fair, earn the spread).
 
 ---
 
@@ -110,12 +118,19 @@ conditional EV), `entry_and_exit` / `entry_margin` (per-window dot + its BTC gap
 
 ## Where it stands / next steps
 
-- **Best lead:** nested gap→time + 24h robustness gate ≈ **+0.02 EV/$1 OOS** (marginal,
-  gross of fees). Open checks: (1) is it from the cheap-entry (5–19c) longshots? — run
-  an **entry-price-band** breakdown; (2) does it survive **fees**? (3) does it hold over
-  **weeks**?
-- **Deferred levers:** the **loss-stop** (needs full price path; pairs with the high-win
-  multi-TF line) and a **fair-value taker** built on the faster feed.
+- **Live direction = the fair-value TAKER.** `experiment_lookahead_taker.py` confirmed
+  the BTC→Polymarket lag (~1s, r=0.36) and that feed speed lifts taker EV monotonically.
+  The binding constraint is now the **exit spread**, not signal. Open work, in order:
+  (1) **maker-exit** model — instead of selling at the bid (crossing), rest a limit at the
+  freshly-repriced fair and *earn* the half-spread (with a realistic fill prob); this is
+  the single change most likely to push pooled EV positive. (2) Source a **genuinely
+  faster BTC feed** (Binance WS is already logged sub-second; the clairvoyant Δ was an
+  upper bound — measure the *real* achievable lead vs the quote). (3) Selectivity: trade
+  only large, fresh dislocations (edge≥0.08, first-per-window) where the move clears the
+  spread. (4) **Net of fees** + over **weeks**.
+- **Passive branch: closed.** No edge survives realistic fills (adverse selection).
+- **Deferred:** the **loss-stop** (needs full price path; pairs with the high-win multi-TF
+  line) — only relevant if a passive variant is ever revived.
 - **Prerequisite for any verdict:** add `book_events` **retention/compaction** and let
   the collectors run for **weeks** so the filtered/nested views have the 30–100+ dots
   they need. On 3 days they collapse to overfit (e.g. n=10 / 100%-win cherry-picks).
