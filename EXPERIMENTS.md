@@ -5,11 +5,15 @@ What we tried to find a profitable limit-order strategy on Polymarket "BTC Up/Do
 results are **negative or near-breakeven**, and that is the point: each idea was
 killed (or kept) cheaply by measurement instead of expensively by trading.
 
-> **One-line state:** on ~3 days of data, **no robust profitable edge has been found**
-> for a passive resting-limit strategy. Adverse selection is the structural wall.
-> Best surviving *lead*: nested gap→time + 24h robustness gate ≈ **+0.02 EV/$1 OOS**
-> (marginal, gross of fees, unconfirmed). The real bottleneck is **data volume**, not
-> ideas — every honest result ends at "need weeks, not days."
+> **One-line state:** on ~3 days of data, **no profitable edge** for a passive
+> resting-limit strategy. Adverse selection is the structural wall. The last apparent
+> lead (nested gap→time + 24h ≈ +0.02 EV/$1) turned out to be a **GUARD ARTIFACT**:
+> with the corrected, live-matching guard (floor scaled to the lookback-window dots,
+> not all history) the nested approach admits ~5× more fills (n≈1,300) and the EV
+> **regresses to ≈ breakeven (0.00), net-negative after fees** — no edge. The bottleneck
+> is **data volume + structure**, not config tuning; every honest result ends at "need
+> weeks, not days," and the structurally-different **fair-value taker** remains the only
+> untried candidate for a real edge.
 
 ---
 

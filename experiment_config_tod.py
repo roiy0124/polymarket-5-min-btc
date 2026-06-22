@@ -104,7 +104,6 @@ def main():
             mdots = [(g, y, "x") for (ws, x, y, g) in past if g is not None]
             bc = best_conditional(mdots, z)
             zones = bc[2] if bc else None
-            floor = math.ceil(args.filt_frac * len(past))
             subxy, subxy_f = {}, {}
             for L in LOOKBACKS_H:
                 lo = bisect.bisect_left(ws_a, T - L * 3600)
@@ -124,6 +123,9 @@ def main():
                                                       "t2": b[1], "shares": round(args.usd / z, 2)}
                 if zones:
                     f = bwf.get(longest)
+                    # guard scaled to the longest-lookback dots (matches the live
+                    # executor fix), NOT all history -- else it tightens as data grows
+                    floor = math.ceil(args.filt_frac * len(subxy[longest]))
                     if f and f[5] > 0 and f[2] > z and f[6] >= floor and all(
                             (eval_line(subxy_f[L], z, f[0], f[1], f[2]) or -9) > 0 for L in cb):
                         armed[("nest", cb)][(side, c)] = {"entry": z, "sell": f[2], "t1": f[0],
