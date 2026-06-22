@@ -37,6 +37,8 @@ idea B. (Strategy-survey deep research in flight: run `wf_28066528-bb1` → will
 - **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
 - **B. Cross-asset divergence scan (SMT)** — 🟢 design agreed; B1 simple existence test next (absorbs C)
 - ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
+- **G. Order-flow imbalance (OFI / queue) nudge** — 🟡 from strategy survey; weak on large coins, contemporaneous
+- **H. Digital-option fair-value benchmark** — 🟡 from survey; ≈ our fairvalue.py, already ~efficient; re-look away from ATM
 - **D. Settlement-basis edge (Chainlink vs Binance)** — 🟢 discussed; free-only (replicate Chainlink), gated on disagreement-rate
 - **E. Maker-rebate harvesting at the tails** — 🟡 discussed → ruled out standalone; rebate kept as a net-EV +term
 - **F. Multi-coin as a measurement multiplier (meta)** — 🟢 discussed → ADOPT as standard evaluation methodology
@@ -151,6 +153,58 @@ not hold; per-coin estimates guard against it.
 - It **amplifies measurement, doesn't create edge.**
 
 **Decision:** adopt as the evaluation framework for B/D and any future idea. No standalone test.
+
+## G. Order-flow imbalance (OFI / queue imbalance) directional nudge
+
+**Status:** proposed from the strategy survey (2026-06-23), discussion-only. Honest prior: WEAK,
+a candidate small contributor at best.
+
+**What it is.** The best-evidenced short-horizon *direction* signal in the microstructure
+literature: order-flow imbalance (OFI), best-bid/ask **queue imbalance**, bid-ask spread, and
+VWAP-to-mid deviation. Canonical model: price move ≈ OFI / depth (linear, slope ∝ 1/depth;
+multi-level book adds info with diminishing weight by distance from the spread).
+
+**Translate to us.** Compute OFI/queue-imbalance on the **Polymarket CLOB** (`book_events`) and/or
+the **underlying exchange** (`btc_ticks`/book) as a small probability nudge for the binary
+outcome — then the residual test (does it beat the quote?).
+
+**Why it's weak here (honest).** (a) The OFI→price relation is **contemporaneous, not forward-
+predictive** — to use it predictively you need a lead (our ~1s exchange→quote lag is the only
+candidate, and the latency-taker is already ~breakeven). (b) Net-of-fee taker edge was
+significant **only on small-caps, NOT on BTC/LTC** (p≈0.75) — our coins are large-cap. (c) The
+on-point 5-min crypto paper: weak, non-significant, negative net Sharpe.
+
+**Test (deferred).** Engineer the universal feature set per coin (OFI, spread, VWAP-to-mid,
+queue-imbalance); **simple logistic** regression to P(up); residual `corr(signal, outcome−price)`,
+**per-coin coefficients**, purged/embargoed walk-forward CV, cross-coin replication (F).
+**Decision:** keep as a low-priority candidate contributor; expectations low on large coins.
+
+## H. Digital-option fair-value benchmark
+
+**Status:** proposed from the survey (2026-06-23); largely ALREADY built/tested.
+
+**What it is.** Each market IS a short-dated **digital option**; a principled fair `P(up)` =
+`Φ((S−K)/(σ√T))` (drift≈0) — exactly what `analysis/fairvalue.py` computes — gives a fair-value
+benchmark to trade the residual `quote − fair` against. (Formal: digital = limit of a tight
+call spread; ATM-near-expiry is a known-hard region.)
+
+**Status of evidence on us.** Already tested (`analysis/fair_vs_market.py`): the market is
+**efficient** w.r.t. this fair value (residual corr ≈ −0.03). So H is mostly a *closed* check,
+not a fresh edge. The survey's one wrinkle: examine the residual **away from ATM-near-boundary**
+(where the model is least stable but also least informative for the quote) and consider a
+**probability-of-touch / barrier** refinement. **Decision:** low priority; re-look only as a
+regional refinement / sanity benchmark, not a standalone edge.
+
+## Research methodology guardrails (from the strategy survey)
+Apply to ALL idea tests (reinforces F + the discipline lessons):
+- **Simple linear/logistic combiners, NOT GBM/deep nets** — flexible ML overfit catastrophically
+  on weak short-horizon crypto signals (OOS R² −11%, significant in the WRONG direction).
+- **Purged + embargoed walk-forward CV** (no leakage).
+- **Per-coin coefficients** (microstructure alpha does NOT transfer across coins) but the **same
+  feature set** replicates (per F).
+- **Always the residual test** (`outcome − market_price`), with **cross-coin replication** as the
+  overfit gate. Every "profitable" result in the literature was continuous-P&L on perps; none
+  tested the binary residual we need.
 
 ## Deferred tech-debt
 - **Price-column naming.** `btc_binance` / `btc_pyth` / `btc_ticks` hold each coin's OWN
@@ -338,3 +392,14 @@ is positive. Built `experiment_xasset_smt.py`.
 - NEXT: re-run at **≥24h** (≈20h away); add a **per-coin** convergence breakdown (pooling the
   leader BTC with laggard alts dilutes — alts should converge more, BTC less); then, if Part 2
   firms up, do Part 3 (gap vs the QUOTE = is it unpriced) → B2.
+
+**Research update (2026-06-23, strategy survey wf_28066528-bb1):** the academic analogue of
+cross-asset SMT is the crypto **"seesaw effect"** — a *NEGATIVE* intraday lead-lag (large coins
+*negatively* predict others at 5–10 min). Two consequences: (i) **the SIGN may flip** — B's
+"convergence" (laggard catches up, +) could actually be **reversal** (laggard goes the other
+way); B1 measures the real sign, so this is settled empirically, not assumed. (ii) **Epps
+headwind** — cross-crypto correlation is *weakest* exactly at 5-min. The "survives transaction
+costs" extension was REFUTED → genuine but FRAGILE. REFINEMENT: replace the raw %-gap with a
+**copula relative-value** measure (`h^{1|2}` vs 0.5 = which coin is rich/cheap vs peers) — more
+principled (Tadi & Witzany 2025; profitable as a continuous 5-min perp spread, untested as a
+binary residual).
