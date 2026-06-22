@@ -13,11 +13,23 @@ only then build a test. An idea graduates to `EXPERIMENTS.md` once it's been mea
 3. **Maker side is adverse-selected** — resting limits fill exactly when you're wrong.
 4. Plus: **−100% on a miss** (binary), and a real **~1s BTC→quote lag** that is spread-capped.
 
+## Guiding principle (user, 2026-06-23)
+We are **not** hunting one silver bullet that flips us to profit — we're **stacking small
+edges**. Because the strategy sits right at the wall (~breakeven after the structural costs),
+**each small edge can flip the sign**, and they're additive. So a thin convergence signal, a
+0.5% fresher feed, a 0.3% fee saving, a better settlement read — individually marginal, jointly
+decisive. Evaluate every idea as a *contributor*, not as a standalone money-printer.
+
+Corollary on the **TIME/SPEED edge** (a recurring want): the fastest *free* price is a direct
+**exchange WebSocket** (Binance spot/perp, multi-venue) — NOT an oracle. Chainlink is downstream
+of the exchanges, so it can't beat them on speed; it's only relevant for settlement *correctness*
+(idea D). No paid streams (if a paid feed gave a clean edge it'd already be standard).
+
 ## Index (status)
 - **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
 - **B. Cross-asset divergence scan (SMT)** — 🟢 design agreed; B1 simple existence test next (absorbs C)
 - ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
-- **D. Settlement-basis edge (Chainlink vs Binance)** — 🟢 discussing now
+- **D. Settlement-basis edge (Chainlink vs Binance)** — 🟢 discussed; free-only (replicate Chainlink), gated on disagreement-rate
 - E. Maker-rebate harvesting at the tails — ⚪ queued
 - F. Multi-coin as a measurement multiplier (meta) — ⚪ queued
 
@@ -53,13 +65,20 @@ dead; X% ⇒ that's where a Chainlink edge would live. We already log BOTH colum
 feed is needed just to size it. (Then, if non-trivial: does `resolved_outcome` track the QUOTE
 better than our Binance-final near the boundary — i.e., is Chainlink already in the price?)
 
-**Open questions for discussion:**
-1. Goal — the *information* edge (needs the fast Chainlink feed) or just *basis-modeling*
-   (correct Binance→Chainlink, no new feed)?
-2. Appetite to acquire Chainlink data — free on-chain heartbeat read vs the paid fast stream?
-3. Agree the cheap first step is the **disagreement-rate sizing** (data-ready, run later)?
+**Refinement (user 2026-06-23):** D is a **correctness** edge, NOT a speed edge — Chainlink is
+*downstream* of the exchanges (it aggregates them), so it's structurally SLOWER than Binance;
+you can't gain speed from it. The free way to get D's benefit: **replicate Chainlink's
+settlement value ourselves from the free exchange feeds** (its published methodology) rather
+than buying the gated stream — gives the settlement-correct value as fast as the exchanges, for
+$0. **No paid streams** (a paid edge would already be standard). The separate *speed* edge =
+direct exchange WS (Binance perp / multi-venue), also free — tracked under the guiding principle
++ [[faster-feed-lag-is-real]].
 
-**Decision:** _pending discussion._
+**Decision (2026-06-23):** pursue D **free only** (replicate Chainlink from exchange feeds, or a
+free on-chain read), never paid. **Gate on the disagreement-rate** (`our_outcome` Binance vs
+`resolved_outcome` Chainlink — how often they differ = the whole opportunity size); if ~0%, drop
+D. Frame as a small *contributor* edge (per the guiding principle), concentrated in coin-flip
+boundary windows. Testing deferred until more data.
 
 ## Deferred tech-debt
 - **Price-column naming.** `btc_binance` / `btc_pyth` / `btc_ticks` hold each coin's OWN
