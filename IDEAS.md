@@ -206,6 +206,21 @@ Apply to ALL idea tests (reinforces F + the discipline lessons):
   overfit gate. Every "profitable" result in the literature was continuous-P&L on perps; none
   tested the binary residual we need.
 
+## Testing phase plan (PAUSED 2026-06-23 — resume when multi-coin data ≥ ~24h)
+
+Idea pass A–H complete; now waiting for the databases to grow. On resume, in order:
+0. **Dedupe pass** — drop exact-duplicate `snapshots`/`btc_ticks` rows per coin (the
+   double-supervisor episode left dupes; 123% coverage) so count-based analyses are clean.
+1. **B1 re-run on ≥24h** — add the **per-coin** convergence breakdown AND read the **SIGN**
+   (convergence `+` vs seesaw/reversal `−`, per the survey). Decide if the cross-asset gap is
+   informative and which direction.
+2. If B1 positive → **B Part 3** (gap vs the QUOTE = is it unpriced?) → **B2** net-of-spread
+   taker sim using the idea-A `net_ev` (maker-rest-or-hold exit; taker-entry fee).
+3. **D disagreement-rate sizing** — `our_outcome` (Binance) vs `resolved_outcome` (Chainlink);
+   gate D (drop if ~0%).
+4. **G** (low priority) — OFI/queue-imbalance residual test (simple logistic, per-coin, purged CV).
+All under the methodology guardrails + the edge-stacking lens (small additive contributors).
+
 ## Deferred tech-debt
 - **Price-column naming.** `btc_binance` / `btc_pyth` / `btc_ticks` hold each coin's OWN
   price (legacy names, no bug). Rename to coin-neutral (`price_binance`/`price_pyth`/
