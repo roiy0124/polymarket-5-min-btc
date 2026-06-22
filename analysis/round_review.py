@@ -31,7 +31,7 @@ from matplotlib.lines import Line2D
 import coins
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = coins.live_db("btc")
+DB_PATH = coins.live_db(coins.default_coin())
 LEDGER = os.path.join(HERE, "paper_trades.csv")
 OUTDIR = os.path.join(HERE, "round_reviews")
 WINDOW = 300.0

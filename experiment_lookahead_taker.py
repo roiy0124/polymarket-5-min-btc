@@ -53,14 +53,15 @@ import argparse
 import sqlite3
 from time import gmtime
 
+import coins
 from analysis.fairvalue import phi
 
 WINDOW = 300.0
 
 
-def db_paths():
+def db_paths(coin="btc"):
     import coins
-    return coins.all_dbs("btc")
+    return coins.all_dbs(coin)
 
 
 def load_windows(conn):
@@ -170,11 +171,13 @@ def main():
                     help="which DELTA to use for the WHEN breakdowns (the realistic lead)")
     ap.add_argument("--boot", type=int, default=1500, help="bootstrap iterations")
     ap.add_argument("--lag-range", type=int, default=4, dest="lag_range")
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS),
+                    help="which coin's data to analyze (default: env ANALYSIS_COIN or btc)")
     args = ap.parse_args()
 
     deltas = [float(x) for x in args.deltas.split(",")]
     fee = args.fee_bps / 1e4
-    paths = db_paths()
+    paths = db_paths(args.coin)
     if not paths:
         print("no DB found"); return
 

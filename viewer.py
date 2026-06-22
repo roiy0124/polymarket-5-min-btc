@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import coins
-DB_PATH = coins.live_db("btc")
+COIN = coins.default_coin()                 # env ANALYSIS_COIN (default btc)
+DB_PATH = coins.live_db(COIN)
 REFRESH_SECONDS = 5
 
 
@@ -214,7 +215,7 @@ def render(d):
     tr.append("</table>")
 
     updated = datetime.fromtimestamp(d["now"], tz=timezone.utc).strftime("%H:%M:%S")
-    return (f'<div class="wrap"><h1>BTC Up/Down — Records</h1>'
+    return (f'<div class="wrap"><h1>{COIN.upper()} Up/Down — Records</h1>'
             f'<div class="sub"><span class="dot"></span>live · updated {updated} UTC · '
             f'auto-refresh {REFRESH_SECONDS}s</div>'
             + cards_html + live_html + "".join(rw) + "".join(tr) + "</div>")
@@ -227,7 +228,7 @@ def page():
         d = {"error": f"{type(e).__name__}: {e}"}
     return (f'<!doctype html><html><head><meta charset="utf-8">'
             f'<meta http-equiv="refresh" content="{REFRESH_SECONDS}">'
-            f'<title>BTC Up/Down Records</title><style>{CSS}</style></head>'
+            f'<title>{COIN.upper()} Up/Down Records</title><style>{CSS}</style></head>'
             f'<body>{render(d)}</body></html>')
 
 

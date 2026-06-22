@@ -52,13 +52,13 @@ def now_window(t):
     return start, start + WINDOW_SECONDS
 
 
-def fetch_tick(pool, market, symbol):
+def fetch_tick(pool, market, symbol, pyth_id):
     """Fetch the four sources concurrently. Each may fail independently."""
     futs = {
         "up": pool.submit(feeds.fetch_book, market["token_up"]),
         "down": pool.submit(feeds.fetch_book, market["token_down"]),
         "binance": pool.submit(feeds.fetch_binance, symbol),
-        "pyth": pool.submit(feeds.fetch_pyth),
+        "pyth": pool.submit(feeds.fetch_pyth, pyth_id),
     }
     out = {}
     for key, fut in futs.items():
@@ -76,6 +76,7 @@ def main():
     args = ap.parse_args()
     coin = args.coin
     symbol = coins.binance_symbol(coin)
+    pyth_id = coins.get(coin).pyth_id
     coins.ensure_dirs(coin)
     db_path = coins.live_db(coin)
 
@@ -163,7 +164,7 @@ def main():
 
         try:
             if market is not None:
-                tick = fetch_tick(pool, market, symbol)
+                tick = fetch_tick(pool, market, symbol, pyth_id)
                 up = tick["up"] or {}
                 down = tick["down"] or {}
                 binance = tick["binance"]

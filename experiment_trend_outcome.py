@@ -29,6 +29,7 @@ import math
 import random
 import argparse
 
+import coins
 from analysis import panel
 
 
@@ -70,10 +71,12 @@ def main():
     ap.add_argument("--horizon", type=float, default=60.0, help="time-left (s) at decision")
     ap.add_argument("--lookbacks", default="30,60,120", help="trend windows in seconds")
     ap.add_argument("--boot", type=int, default=2000)
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS),
+                    help="which coin's data to analyze (default: env ANALYSIS_COIN or btc)")
     args = ap.parse_args()
     lbs = [float(x) for x in args.lookbacks.split(",")]
 
-    conn = panel.connect()
+    conn = panel.connect(coin=args.coin)
     windows = conn.execute(
         "SELECT window_start, resolved_outcome, strike_binance FROM windows "
         "WHERE resolved_outcome IN ('Up','Down') AND strike_binance IS NOT NULL "

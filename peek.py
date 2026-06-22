@@ -7,9 +7,10 @@
 import os
 import sqlite3
 import sys
+import argparse
 
 import coins
-DB_PATH = coins.live_db("btc")
+DB_PATH = coins.live_db(coins.default_coin())
 
 
 def fmt(v, nd=4):
@@ -58,13 +59,19 @@ def windows(conn):
 
 
 def main():
+    ap = argparse.ArgumentParser(description="inspect a coin's collected data")
+    ap.add_argument("mode", nargs="?", default="summary", choices=["summary", "windows"])
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS),
+                    help="which coin's DB to inspect (default: env ANALYSIS_COIN or btc)")
+    args = ap.parse_args()
+    db = coins.live_db(args.coin)
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(db)
     except sqlite3.Error as e:
-        print(f"cannot open {DB_PATH}: {e}")
+        print(f"cannot open {db}: {e}")
         return
-    mode = sys.argv[1] if len(sys.argv) > 1 else "summary"
-    if mode == "windows":
+    print(f"[{args.coin}] {db}")
+    if args.mode == "windows":
         windows(conn)
     else:
         summary(conn)

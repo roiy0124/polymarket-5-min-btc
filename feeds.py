@@ -170,8 +170,9 @@ def fetch_price_history(token_id, start_ts, end_ts, fidelity=1, timeout=DEFAULT_
     return out
 
 
-def fetch_pyth(timeout=DEFAULT_TIMEOUT):
-    url = f"{PYTH_LATEST}?ids[]={PYTH_BTC_ID}&parsed=true&encoding=hex"
+def fetch_pyth(pyth_id=PYTH_BTC_ID, timeout=DEFAULT_TIMEOUT):
+    """Latest Pyth price for the given Crypto.<COIN>/USD feed id (defaults to BTC)."""
+    url = f"{PYTH_LATEST}?ids[]={pyth_id}&parsed=true&encoding=hex"
     data = _get_json(url, timeout=timeout)
     item = data["parsed"][0]["price"]
     return int(item["price"]) * (10 ** int(item["expo"]))

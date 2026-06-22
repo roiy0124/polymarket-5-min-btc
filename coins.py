@@ -23,22 +23,26 @@ DATA_ROOT = os.path.join(HERE, "data")
 
 
 class Coin:
-    __slots__ = ("key", "slug_prefix", "binance")
+    __slots__ = ("key", "slug_prefix", "binance", "pyth_id")
 
-    def __init__(self, key, slug_prefix, binance):
+    def __init__(self, key, slug_prefix, binance, pyth_id):
         self.key = key
         self.slug_prefix = slug_prefix      # Gamma slug = f"{slug_prefix}-{window_start}"
         self.binance = binance              # Binance symbol, e.g. BTCUSDT
+        self.pyth_id = pyth_id              # Pyth Crypto.<COIN>/USD feed id (verified live)
 
 
-# the markets all share the {coin}-updown-5m-{ts} slug pattern (verified live)
+# the markets all share the {coin}-updown-5m-{ts} slug pattern (verified live).
+# pyth_id = Pyth Hermes Crypto.<COIN>/USD price-feed id (all verified against live
+# prices 2026-06-23; magnitudes matched btc 64617 / eth 1738 / sol 72.7 / xrp 1.13 /
+# doge 0.083 / bnb 593).
 COINS = {
-    "btc":  Coin("btc",  "btc-updown-5m",  "BTCUSDT"),
-    "eth":  Coin("eth",  "eth-updown-5m",  "ETHUSDT"),
-    "sol":  Coin("sol",  "sol-updown-5m",  "SOLUSDT"),
-    "xrp":  Coin("xrp",  "xrp-updown-5m",  "XRPUSDT"),
-    "doge": Coin("doge", "doge-updown-5m", "DOGEUSDT"),
-    "bnb":  Coin("bnb",  "bnb-updown-5m",  "BNBUSDT"),
+    "btc":  Coin("btc",  "btc-updown-5m",  "BTCUSDT",  "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43"),
+    "eth":  Coin("eth",  "eth-updown-5m",  "ETHUSDT",  "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace"),
+    "sol":  Coin("sol",  "sol-updown-5m",  "SOLUSDT",  "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"),
+    "xrp":  Coin("xrp",  "xrp-updown-5m",  "XRPUSDT",  "0xec5d399846a9209f3fe5881d70aae9268c94339ff9817e8d18ff19fa05eea1c8"),
+    "doge": Coin("doge", "doge-updown-5m", "DOGEUSDT", "0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c"),
+    "bnb":  Coin("bnb",  "bnb-updown-5m",  "BNBUSDT",  "0x2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f"),
 }
 
 # coins the supervisor launches a collector pair for. Trim this to collect fewer.
@@ -46,6 +50,13 @@ ENABLED = ["btc", "eth", "sol", "xrp", "doge", "bnb"]
 
 _LEGACY_LIVE = os.path.join(HERE, "btc_updown.db")
 _LEGACY_ARCHIVE = os.path.join(HERE, "old_dbs")
+
+
+def default_coin():
+    """Coin selected via env ANALYSIS_COIN (default 'btc'), validated. This is the
+    single switch that points the analysis/inspection tools at one coin's data."""
+    c = os.environ.get("ANALYSIS_COIN", "btc")
+    return c if c in COINS else "btc"
 
 
 def get(coin):

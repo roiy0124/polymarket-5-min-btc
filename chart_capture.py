@@ -23,6 +23,7 @@ import sys
 import glob
 import time
 import sqlite3
+import argparse
 from datetime import datetime, timezone
 
 import matplotlib
@@ -125,9 +126,16 @@ def backfill(conn):
 
 
 def main():
+    global OUTDIR, DB_PATH
+    ap = argparse.ArgumentParser(description="per-round price charts for one coin")
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS))
+    ap.add_argument("--once", action="store_true", help="backfill existing windows and exit")
+    args = ap.parse_args()
+    DB_PATH = coins.live_db(args.coin)
+    OUTDIR = os.path.join(HERE, "round_charts", args.coin)
     os.makedirs(OUTDIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=10)
-    once = "--once" in sys.argv
+    once = args.once
 
     n = backfill(conn)
     print(f"chart_capture: backfilled {n} round chart(s) -> {OUTDIR}", flush=True)

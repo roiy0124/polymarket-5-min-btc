@@ -16,17 +16,17 @@ DB_PATH = coins.live_db("btc")
 OLD_DBS_DIR = coins.archive_dir("btc")
 
 
-def _source_dbs():
-    """Current live DB + any archived DBs for BTC (fallback-aware via coins)."""
-    return coins.all_dbs("btc")
+def _source_dbs(coin="btc"):
+    """Live DB + any archived DBs for the coin (fallback-aware via coins)."""
+    return coins.all_dbs(coin)
 
 
-def _merged_connection(days):
+def _merged_connection(days, coin="btc"):
     """In-memory DB of windows+snapshots from the last `days` days, merged across
     the current DB and every archive in old_dbs/. Stream tables (book_events/trades/
     btc_ticks) are created empty (too big to merge; only price analyses use this)."""
     cutoff = time.time() - float(days) * 86400.0
-    sources = _source_dbs()
+    sources = _source_dbs(coin)
     mem = sqlite3.connect(":memory:")
     if not sources:
         return mem
@@ -62,21 +62,24 @@ def _merged_connection(days):
                 pass
     mem.commit()
     nwin = mem.execute("SELECT COUNT(*) FROM windows").fetchone()[0]
-    print(f"[scope] last {days} days across {n_db} db(s) -> {nwin} windows", flush=True)
+    print(f"[scope] {coin}: last {days} days across {n_db} db(s) -> {nwin} windows", flush=True)
     return mem
 
 
-def connect(path=None):
-    """Open the data. Honors env BTC_ANALYSIS_DAYS: if set, return a merged
-    last-N-days connection across current + old_dbs/; else the current DB."""
+def connect(path=None, coin=None):
+    """Open the data for `coin` (default: env ANALYSIS_COIN, else btc). Honors env
+    BTC_ANALYSIS_DAYS: if set, return a merged last-N-days connection across the
+    coin's live DB + archives; else the coin's current live DB."""
+    if coin is None:
+        coin = coins.default_coin()
     if path is None:
         days = os.environ.get("BTC_ANALYSIS_DAYS")
         if days:
             try:
-                return _merged_connection(days)
+                return _merged_connection(days, coin)
             except Exception as e:
                 print(f"[scope] merge failed ({e!r}); using current DB", flush=True)
-    return sqlite3.connect(path or DB_PATH, timeout=10)
+    return sqlite3.connect(path or coins.live_db(coin), timeout=10)
 
 
 def build_panel(conn, horizon_s=240.0):
