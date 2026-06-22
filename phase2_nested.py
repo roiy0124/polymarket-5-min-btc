@@ -88,8 +88,12 @@ def generate_nested_signals(now):
                 return [(x, y) for (ws, x, y, g) in dots
                         if ws >= cut and g is not None and any(a <= g <= b for a, b in zones)]
 
+            # dynamic guard scaled to the LONGEST-lookback dots (NOT all history, which
+            # would grow without bound and reject every line as data accumulates)
+            n_long = sum(1 for (ws, x, y, g) in dots if ws >= now - longest * 3600)
+            floor = math.ceil(FILT_FRAC * n_long)
             bw = best_sell_window(fsub(longest), z)
-            if not (bw and bw[5] > 0 and bw[2] > z and bw[6] >= math.ceil(FILT_FRAC * len(dots))):
+            if not (bw and bw[5] > 0 and bw[2] > z and bw[6] >= floor):
                 continue
             if not all((_eval_line(fsub(L), z, bw[0], bw[1], bw[2]) or -9) > 0 for L in COMBO):
                 continue
