@@ -54,6 +54,15 @@ def charted(ws):
     return bool(glob.glob(os.path.join(OUTDIR, f"{ws}_*.png")))
 
 
+def pxfmt(v):
+    """Format a price with decimals adapted to its magnitude (so XRP/DOGE don't show as 1/0)."""
+    if v is None:
+        return "?"
+    a = abs(v)
+    d = 0 if a >= 1000 else 2 if a >= 10 else 4 if a >= 1 else 5 if a >= 0.01 else 6
+    return f"{v:.{d}f}"
+
+
 def render(conn, ws, official_up=None):
     row = conn.execute(
         "SELECT strike_binance, final_binance, our_outcome, resolved_outcome "
@@ -95,18 +104,23 @@ def render(conn, ws, official_up=None):
         ax2.plot(bx, by, color=COLOR, lw=1.3, label=f"{COIN.upper()} price", zorder=4)
         anchors = list(by) + ([strike] if strike else [])
         lo, hi = min(anchors), max(anchors)
-        pad = max((hi - lo) * 0.35, 3.0)
+        # pad RELATIVE to the price level (not a fixed $3 — that flattened low-priced
+        # coins like DOGE/XRP into a straight line). Tight enough that the actual
+        # intra-round movement fills the axis; the relative floor only matters for a
+        # near-flat round.
+        level = abs(hi + lo) / 2 or 1.0
+        pad = max((hi - lo) * 0.12, level * 5e-4)
         ax2.set_ylim(lo - pad, hi + pad)
         if strike:
             ax2.axhline(strike, ls="--", color="#d4a017", lw=1.2,
-                        label=f"target / strike  {strike:.0f}")
+                        label=f"target / strike  {pxfmt(strike)}")
         ax2.set_ylabel(f"{COIN.upper()} price (USD)", color=COLOR)
         ax2.tick_params(axis="y", labelcolor=COLOR)
         ax2.ticklabel_format(axis="y", style="plain", useOffset=False)
 
     outc = official_outcome or our or "pending"
     t = datetime.fromtimestamp(ws, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-    sub = f"  |  {COIN.upper()} {strike:.0f} -> {final:.0f}" if (strike and final) else ""
+    sub = f"  |  {COIN.upper()} {pxfmt(strike)} -> {pxfmt(final)}" if (strike and final) else ""
     ax.set_title(f"{t} UTC   resolved: {outc}{sub}")
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
