@@ -17,9 +17,49 @@ only then build a test. An idea graduates to `EXPERIMENTS.md` once it's been mea
 - **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
 - **B. Cross-asset divergence scan (SMT)** — 🟢 design agreed; B1 simple existence test next (absorbs C)
 - ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
-- D. Settlement-basis edge (Chainlink vs Binance) — ⚪ queued (needs Chainlink data)
+- **D. Settlement-basis edge (Chainlink vs Binance)** — 🟢 discussing now
 - E. Maker-rebate harvesting at the tails — ⚪ queued
 - F. Multi-coin as a measurement multiplier (meta) — ⚪ queued
+
+## D. Settlement-basis edge (Chainlink vs Binance/Pyth)
+
+**Status:** discussing (2026-06-23). Discussion/design only; tests deferred until more data.
+
+**Mechanism.** Each market RESOLVES on the **Chainlink** `<COIN>/USD` data stream, but we — and
+most retail, and the feeds the crowd watches — read **Binance spot / Pyth**. Near the window
+boundary, the Binance↔Chainlink **basis** can *flip* the outcome (when the final price sits
+within a few $ of the strike). Two edge forms:
+- *Information:* be ON the settlement feed (Chainlink) → know the true outcome a beat before a
+  market that prices off a CEX.
+- *Basis modeling:* if the Binance↔Chainlink basis has a predictable lag/bias, correct our
+  Binance read toward the likely Chainlink value to sharpen boundary-case outcome prediction.
+
+**Why it might beat the walls.** It's a *different* knowledge than position/trend (which the
+market already prices). The whole question is whether the **quote already prices Chainlink** —
+sophisticated MMs must, since they price the settlement; if so, no edge. If many participants
+lag (price off the CEX), knowing Chainlink first is an edge. Either way it's concentrated in the
+**minority of "coin-flip" boundary windows** (most windows resolve unambiguously).
+
+**Crux doubts (honest).** (a) MMs probably DO price off Chainlink → quote already reflects it →
+same efficiency wall. (b) The fast Chainlink **Data Stream is auth-gated/paid** (acquisition
+cost); the free **on-chain** Chainlink feed updates only on a heartbeat/deviation (not
+sub-second) → likely too stale at the boundary. (c) Few opportunities (boundary windows only).
+(d) Still a latency race at the close.
+
+**First test (DATA-READY, deferred).** Measure the Binance-vs-Chainlink **outcome disagreement
+rate** on resolved windows: `our_outcome` (Binance final ≥ strike) vs `resolved_outcome`
+(official = Chainlink). The disagreement % **sizes the opportunity** — ~0% ⇒ basis never flips,
+dead; X% ⇒ that's where a Chainlink edge would live. We already log BOTH columns, so no new
+feed is needed just to size it. (Then, if non-trivial: does `resolved_outcome` track the QUOTE
+better than our Binance-final near the boundary — i.e., is Chainlink already in the price?)
+
+**Open questions for discussion:**
+1. Goal — the *information* edge (needs the fast Chainlink feed) or just *basis-modeling*
+   (correct Binance→Chainlink, no new feed)?
+2. Appetite to acquire Chainlink data — free on-chain heartbeat read vs the paid fast stream?
+3. Agree the cheap first step is the **disagreement-rate sizing** (data-ready, run later)?
+
+**Decision:** _pending discussion._
 
 ## Deferred tech-debt
 - **Price-column naming.** `btc_binance` / `btc_pyth` / `btc_ticks` hold each coin's OWN
