@@ -82,4 +82,30 @@ buying near-certainties), which matches the stated preference for steady coverag
 2. How late is the sweet spot — last 30s, 10s, 5s? (Later = more certain but thinner upside.)
 3. Loss-stop appetite given the −100% tail risk.
 
-**Decision:** _pending discussion._
+### A.1 — Exit-execution sub-problem (under deep research, 2026-06-23)
+
+Reframed (user): the fee is a **net-EV cost input to signal selection**, not a directional
+bias. Score every candidate signal on profit *after fees*; the statistics decide. The fee is
+price-dependent (`0.07·p·(1−p)`) so near-50/50 signals must clear a bigger gross edge — as a
+consequence of honest accounting, not a steer toward the tails. KEY NUANCE: the taker fee
+applies ONLY to spread-crossing fills; a resting limit that fills is a **maker (0 fee + 20–25%
+rebate)**, and holding a binary to settlement is **fee-free** (not a taker trade).
+
+So the open question is the EXIT POLICY. Candidates:
+- **(a) rest a maker sell at target** — no fee + rebate, but fills only when price rises → on winners.
+- **(b) rest, else cross to exit (taker)** — user's first instinct. CRITIQUE: the taker
+  fallback fires exactly on losers (price fell, limit unfilled) → you pay the fee *and* book a
+  loss; the cheap exit lands on winners, the dear one on losers = adverse selection relocated
+  to the exit. Softens, doesn't escape it.
+- **(c) rest, else HOLD to 0/1 resolution** — no exit fee EVER (settlement isn't a taker
+  trade); cost is the full −100% on losers you'd likely lose anyway. Probably dominates (b).
+- hybrids: timeouts, reprice toward mid, partial exits, trailing.
+
+User asked to RESEARCH the recommended way rather than trust instinct. Deep-research launched
+(run `wf_51c2b4d1-413`): exit execution under maker–taker fees, optimal-stopping/take-profit
+under costs, maker-rebate viability + adverse selection by price level, binary hold-to-
+resolution as a fee-free exit, and Polymarket practitioner tactics. **Document the decided
+exit policy here after the research returns + is validated.**
+
+**Decision:** _pending deep-research synthesis → then encode one net-EV `net_ev(entry, exit,
+entry_mode, exit_mode)` helper and wire it into the signal scorers._
