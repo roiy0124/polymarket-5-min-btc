@@ -15,7 +15,7 @@ only then build a test. An idea graduates to `EXPERIMENTS.md` once it's been mea
 
 ## Index (status)
 - **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
-- B. Cross-asset lead-lag matrix → laggard taker — ⚪ queued
+- **B. Cross-asset lead-lag → laggard taker** — 🟢 discussing now
 - C. Basket-divergence SMT — ⚪ queued
 - D. Settlement-basis edge (Chainlink vs Binance) — ⚪ queued (needs Chainlink data)
 - E. Maker-rebate harvesting at the tails — ⚪ queued
@@ -132,3 +132,63 @@ signal-win-prob) grid where hold-to-resolution beats any taker exit.
 
 **Status:** ✅ exit policy decided + documented. Next: encode `net_ev(entry, exit, entry_mode,
 exit_mode)` (taker-entry fee; maker-or-hold exit; −100% term) and wire into the signal scorers.
+
+---
+
+## B. Cross-asset lead-lag → laggard taker
+
+**Status:** discussing (2026-06-23). Needs more alt data to test the EV; the lead-lag *matrix*
+is testable sooner. This is the pairwise version of SMT; idea C is its basket generalization.
+
+**Core hypothesis.** A leader coin (BTC, or whichever the data says) leads the alts. When the
+leader moves, (1) the alt's *underlying* price follows within seconds, and (2) the alt's
+*Polymarket quote* follows even **later**, because alt markets are sleepier / less contested.
+So a bot that sees the leader move can take the alt's **stale quote** before it reprices — a
+**taker entry on a genuine cross-asset information edge** (LONG the option, unlike passive).
+
+**Two lead-lag layers (keep them separate):**
+- *Underlying* lead-lag: does BTC's price lead ETH/SOL/XRP/DOGE/BNB's price? (Crypto is highly
+  correlated; BTC often leads, but it's time-varying — prior research had Bybit/OKX leading
+  Binance in some windows. Measure, don't assume.)
+- *Quote* lead-lag: does each alt's Polymarket quote lag its OWN underlying (like BTC's quote
+  lagged BTC ~1s), and does it lag *more* (sleepier = bigger window)?
+The edge stacks both: leader move → predicts alt underlying → alt quote hasn't priced it yet.
+
+**Why it might beat the walls.** Efficiency: alt markets *may* be less efficient than BTC's
+(the whole hope) → the cross-asset residual could be nonzero where BTC-on-itself was zero.
+Fee: it's a taker entry, so it pays `0.07·a·(1−a)` (use the idea-A net_ev) — needs a *fat*
+dislocation to clear it. Adverse selection: a taker on real info is on the right side of it.
+
+**THE CRUX RISK (be honest up front).** "Sleepier" cuts both ways: the same illiquidity that
+makes an alt quote lag also makes its **spread wide and depth thin**. We cross that spread as a
+taker — so a 5–10¢ alt spread can cost *more than the lag is worth*, and we may not fill size.
+The make-or-break is whether **lag-capture > spread + fee** on any coin. Likely only the more
+liquid alts (ETH/SOL) are tradeable; the sleepiest (DOGE/XRP/BNB) may lag most but be
+un-crossable. The data decides.
+
+**Test plan (in order; first step is ~data-ready):**
+1. **Underlying lead-lag matrix** — 6×6 cross-correlation of 1s **% returns** (scale-normalized)
+   between coins' Binance prices, swept over lags. Identifies leader→laggard pairs + peak lag.
+   Cheap; needs only a few hours of multi-coin ticks (have some).
+2. **Per-coin quote lag** — each alt's Polymarket-mid lag vs its own underlying (reuse the
+   lookahead lead-lag tool). Which alts lag longest?
+3. **Cross-asset residual test** — does the leader's recent move predict the laggard's OUTCOME
+   *beyond* the laggard's market price? `corr(leader_move, alt_outcome − alt_price)`. >0 (CI
+   excludes 0) ⇒ the alt underreacts to the leader ⇒ edge. (Mirrors `experiment_trend_outcome`.)
+4. **Net-EV taker sim** — when the leader moves enough, take the alt's stale quote (taker
+   entry, pay fee), exit maker-rest-or-hold (idea-A policy); window-clustered CIs; explicitly
+   net of the **alt spread**. This is where `net_ev` gets built.
+
+**Risks / kill-criteria:** (a) alt markets as efficient as BTC's → residual ~0; (b) alt spread
++ thinness eats the lag (the crux); (c) leader→laggard relationship time-varying / breaks on
+alt-idiosyncratic moves; (d) fee needs a fat dislocation.
+
+**Open questions for discussion:**
+1. Leader choice — BTC only, or the best leader per the matrix (could be ETH/SOL)? (I'd let the
+   matrix decide.)
+2. We must measure the **net** (lag-capture − spread − fee), not just the lag — agree the crux
+   is the spread/liquidity of the sleepy alts?
+3. Scope now: run the **underlying lead-lag matrix** soon (data-light) and defer the residual/
+   EV tests until alts have ~days of windows?
+
+**Decision:** _pending discussion._
