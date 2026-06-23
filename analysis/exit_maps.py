@@ -366,7 +366,14 @@ def main():
                     help="which coin's data to map (default: env ANALYSIS_COIN or btc)")
     args = ap.parse_args()
     base = os.path.join(OUTDIR, args.coin)        # per-coin output: exit_maps/<coin>/...
-    conn = panel.connect(coin=args.coin)
+    # SCAN across ALL of the coin's DBs (live + archives) by default -- like chart_capture -- so an
+    # archived coin (e.g. BTC after a reset) maps its FULL history, not just its small live.db.
+    # BTC_ANALYSIS_DAYS still narrows the window if set.
+    days = os.environ.get("BTC_ANALYSIS_DAYS", "36500")   # default: effectively all history
+    try:
+        conn = panel._merged_connection(days, args.coin)
+    except Exception:
+        conn = panel.connect(coin=args.coin)
     windows = load_windows(conn)
     conn.close()
     # pass 1: build every map's dots (exit + margin + the joined full set), then the
