@@ -69,7 +69,13 @@ so the per-window queries (keyed on `window_start`) are unchanged.
   `--coin` on `peek.py`, `chart_capture.py`, `analysis/exit_maps.py`, and the live
   experiments. Outputs are per-coin: `exit_maps/<coin>/...`, `round_charts/<coin>/`.
 - **`analyze_all.py`** runs the suite (exit maps + round-chart backfill) for many coins
-  at once, each into its own folder.
+  at once, each into its own folder, then builds the cross-coin gathered montages.
+- **Two graph views:** PER-COIN (`exit_maps/<coin>/`, `round_charts/<coin>/` — one coin, many
+  entry prices/rounds) and CROSS-COIN (`gathered/exit_maps/<side>/entry_NNc.png`,
+  `gathered/round_charts/<round>.png` — the SAME graph with all coins side by side, via
+  `make_gathered.py`; auto-built by menu 5/6 after the per-coin loop). All graphs use coin-correct
+  labels + per-coin colors; price axes scale to each coin. (`exit_maps/`, `round_charts/`,
+  `gathered/` are all gitignored.)
 
 ```sh
 ANALYSIS_COIN=eth python -m analysis.fairvalue   # any panel analysis, scoped to ETH
@@ -117,10 +123,12 @@ adapter is a clean future drop-in.
 | `ws_collector.py` | Async WebSocket layer, **`--coin`**: market-channel events + Binance bookTicker → buffered writes; watchdog reconnect; per-coin `RETAIN_DAYS` prune. Needs `websockets`. |
 | `supervisor.py` | Launches + auto-restarts a collector pair **per `coins.ENABLED`** (windowless on Windows) + viewer + chart_capture. Stop via Ctrl-C or a `STOP` file. |
 | `migrate_to_data_layout.py` | One-time move of legacy `btc_updown.db`/`old_dbs/` → `data/btc/`. |
+| `migrate_rename_columns.py` | One-time `ALTER` (done): renamed `btc_binance`/`btc_pyth`→`price_binance`/`price_pyth`, table `btc_ticks`→`price_ticks` across all DBs. |
 | `peek.py` | Read-only CLI inspection, **`--coin`** (`python peek.py --coin eth [windows]`). |
 | `viewer.py` | Live browser dashboard (stdlib http.server, default `:8765`). Honors `ANALYSIS_COIN`. Read-only. |
-| `chart_capture.py` | Per-round price charts, **`--coin`** → `round_charts/<coin>/`. Supervisor child. |
-| `analyze_all.py` | Run exit maps + round charts for many coins at once, organized per coin. |
+| `chart_capture.py` | Per-round price charts, **`--coin`** → `round_charts/<coin>/`. Coin-correct titles/labels + per-coin line color; price axis scales to the coin (low-priced coins not flat). Supervisor child (live) / `--once` (backfill). |
+| `analyze_all.py` | Run exit maps + round charts for many coins at once (per coin) **+ the cross-coin gathered montages** at the end. |
+| `make_gathered.py` | **Cross-coin montages**: tiles the SAME graph across all coins side by side → `gathered/exit_maps/<up\|down\|*_margin>/entry_NNc.png` and `gathered/round_charts/<round>.png`. Auto-run by menu 5/6 + analyze_all; menu `m` rebuilds. |
 
 ### Data model (per coin: `data/<coin>/live.db`, SQLite — gitignored; one DB per coin, identical schema)
 
