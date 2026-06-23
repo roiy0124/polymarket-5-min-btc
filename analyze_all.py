@@ -52,8 +52,13 @@ def main():
         if not args.no_charts:
             _run([PY, "chart_capture.py", "--coin", c, "--once"], c)
 
-    print(f"\ndone: {len(sel)} coin(s). "
-          f"exit maps -> exit_maps/<coin>/ , charts -> round_charts/<coin>/")
+    # cross-coin gathered montages (all coins side by side per graph)
+    print("\n===== gathered (cross-coin) =====", flush=True)
+    what = "all" if (not args.no_maps and not args.no_charts) else ("exit" if args.no_charts else "round")
+    subprocess.run([PY, "make_gathered.py", "--what", what], cwd=HERE)
+
+    print(f"\ndone: {len(sel)} coin(s). exit maps -> exit_maps/<coin>/ , charts -> "
+          f"round_charts/<coin>/ , cross-coin -> gathered/")
 
 
 if __name__ == "__main__":

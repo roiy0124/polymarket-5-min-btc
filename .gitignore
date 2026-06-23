@@ -11,6 +11,7 @@ __pycache__/
 STOP
 exit_maps/
 matrix/
+gathered/
 round_charts/*.png
 round_charts/**/*.png
 signals.json

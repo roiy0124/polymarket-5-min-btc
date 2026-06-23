@@ -110,6 +110,7 @@ def a_round_charts():
     sel = ask_coins()
     for c in sel:
         run([PY, "chart_capture.py", "--coin", c, "--once"], pause=False)
+    run([PY, "make_gathered.py", "--what", "round"], pause=False)   # cross-coin gather
     input("\n[Enter] to return to the menu ")
 
 
@@ -118,14 +119,12 @@ def a_exit_maps():
     sel = ask_coins()
     for c in sel:
         run([PY, "-m", "analysis.exit_maps", "--coin", c], pause=False, env_extra=env)
+    run([PY, "make_gathered.py", "--what", "exit"], pause=False)    # cross-coin gather
     input("\n[Enter] to return to the menu ")
 
 
-def a_matrix():
-    sel = ask_coins()
-    for c in sel:
-        run([PY, "make_matrix.py", "--coin", c], pause=False)
-    input("\n[Enter] to return to the menu ")
+def a_gathered():
+    run([PY, "make_gathered.py"])
 
 
 def a_calibration():
@@ -304,7 +303,7 @@ MENU = [
     ("VISUALS", None),
     ("5", "Generate exit maps (per entry price; all coins or one)", a_exit_maps),
     ("6", "Generate round charts (backfill; all coins or one)", a_round_charts),
-    ("m", "Matrix montages — REBUILD only (5 & 6 already auto-build them)", a_matrix),
+    ("m", "Gathered cross-coin montages — REBUILD (5 & 6 already auto-build them)", a_gathered),
     ("ANALYSIS", None),
     ("7", "Phase-1 SIGNAL FINDER (win/ROI floors -> signals.json)", a_signals),
     ("8", "Calibration test (price vs outcome)", a_calibration),
