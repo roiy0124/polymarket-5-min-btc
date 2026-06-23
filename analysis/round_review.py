@@ -202,7 +202,7 @@ def review_window(conn, ws, legs, include_unfilled):
         Line2D([], [], marker="s", color="w", markerfacecolor="gray",
                markeredgecolor="black", markersize=7, label="down order (square)"),
         Line2D([], [], color="purple", ls="--", lw=0.8, label="target (expected sell)"),
-        Line2D([], [], color="#f0883e", lw=1.2, label="BTC price"),
+        Line2D([], [], color=COLOR, lw=1.2, label=f"{COIN.upper()} price"),
     ]
     if strike:
         handles.append(Line2D([], [], color="#d4a017", ls="--", lw=1.1,
