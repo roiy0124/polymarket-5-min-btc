@@ -76,6 +76,14 @@ so the per-window queries (keyed on `window_start`) are unchanged.
   `make_gathered.py`; auto-built by menu 5/6 after the per-coin loop). All graphs use coin-correct
   labels + per-coin colors; price axes scale to each coin. (`exit_maps/`, `round_charts/`,
   `gathered/` are all gitignored.)
+- **Full-history scan + hi-res (2026-06-24):** both `chart_capture` (round charts) and
+  `analysis/exit_maps` SCAN a coin's whole dataset — **live DB + archives, merged** (`coins.all_dbs`)
+  — so an archived coin like BTC maps its full history, not just its small post-reset `live.db`
+  (BTC: 90→~1014 round charts; 120→~1117 exit-map windows). Without this BTC fell out of the
+  cross-coin gathered montages. Charts render **hi-res** (round 170 dpi, exit 140 dpi); `make_gathered`
+  tiles them at 200 dpi with source-preserving tiles (~1120px/tile vs the old ~324px mesh) so cross-coin
+  detail is crisp on zoom (`make_gathered --dpi N` trades crispness vs file size). `BTC_ANALYSIS_DAYS`
+  still narrows the exit-map window if set.
 
 ```sh
 ANALYSIS_COIN=eth python -m analysis.fairvalue   # any panel analysis, scoped to ETH
@@ -126,7 +134,7 @@ adapter is a clean future drop-in.
 | `migrate_rename_columns.py` | One-time `ALTER` (done): renamed `btc_binance`/`btc_pyth`→`price_binance`/`price_pyth`, table `btc_ticks`→`price_ticks` across all DBs. |
 | `peek.py` | Read-only CLI inspection, **`--coin`** (`python peek.py --coin eth [windows]`). |
 | `viewer.py` | Live browser dashboard (stdlib http.server, default `:8765`). Honors `ANALYSIS_COIN`. Read-only. |
-| `chart_capture.py` | Per-round price charts, **`--coin`** → `round_charts/<coin>/`. Coin-correct titles/labels + per-coin line color; price axis scales to the coin (low-priced coins not flat). Supervisor child (live) / `--once` (backfill). |
+| `chart_capture.py` | Per-round price charts, **`--coin`** → `round_charts/<coin>/`. Coin-correct titles/labels + per-coin line color; price axis scales to the coin (low-priced coins not flat). Supervisor child (live) / `--once` (backfill). **Backfill merges live + archives (`coins.all_dbs`)** so an archived coin charts its full history; renders **hi-res (170 dpi)**. |
 | `analyze_all.py` | Run exit maps + round charts for many coins at once (per coin) **+ the cross-coin gathered montages** at the end. |
 | `make_gathered.py` | **Cross-coin montages**: tiles the SAME graph across all coins side by side → `gathered/exit_maps/<up\|down\|*_margin>/entry_NNc.png` and `gathered/round_charts/<round>.png`. Auto-run by menu 5/6 + analyze_all; menu `m` rebuilds. **HI-RES (2026-06-23):** source charts render at 140–170 dpi and the montage at 200 dpi with source-preserving tiles (~1120px/tile vs the old ~324px mesh) so you can ZOOM into cross-coin detail; `--dpi N` trades crispness vs file size. |
 
