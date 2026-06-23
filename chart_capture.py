@@ -144,6 +144,22 @@ def backfill(conn):
     return n
 
 
+def open_merged_ro(coin):
+    """Read-only in-memory connection UNION-ing windows+snapshots across the coin's live DB +
+    archives (coins.all_dbs), so BACKFILL charts EVERY resolved round -- not just the live DB's.
+    Without this, a coin whose history was archived (e.g. BTC after a reset) only charts its tiny
+    live.db and goes missing from the cross-coin gathered montages."""
+    conn = sqlite3.connect("file::memory:", uri=True)
+    dbs = [p for p in coins.all_dbs(coin) if os.path.exists(p)]
+    for i, p in enumerate(dbs):
+        conn.execute(f"ATTACH DATABASE 'file:{os.path.abspath(p)}?mode=ro' AS db{i}")
+    for tbl in ("windows", "snapshots"):
+        union = " UNION ALL ".join(f"SELECT * FROM db{i}.{tbl}" for i in range(len(dbs)))
+        if union:
+            conn.execute(f"CREATE TEMP VIEW {tbl} AS {union}")
+    return conn
+
+
 def main():
     global OUTDIR, DB_PATH, COIN, COLOR
     ap = argparse.ArgumentParser(description="per-round price charts for one coin")
@@ -163,14 +179,17 @@ def main():
     DB_PATH = coins.live_db(args.coin)
     OUTDIR = os.path.join(HERE, "round_charts", args.coin)
     os.makedirs(OUTDIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    once = args.once
 
-    n = backfill(conn)
+    # BACKFILL across ALL of the coin's DBs (live + archives) so every resolved round charts --
+    # else an archived coin (e.g. BTC after a reset) goes missing from the gathered montages.
+    mconn = open_merged_ro(args.coin)
+    n = backfill(mconn)
+    mconn.close()
     print(f"chart_capture: backfilled {n} round chart(s) -> {OUTDIR}", flush=True)
-    if once:
-        conn.close()
+    if args.once:
         return
+
+    conn = sqlite3.connect(DB_PATH, timeout=10)   # live loop: new windows land in the live DB
 
     official = {}   # window_start -> official up points (fetched live near close)
     print("chart_capture: live (Ctrl-C to stop)", flush=True)
