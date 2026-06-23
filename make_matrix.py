@@ -38,15 +38,19 @@ import coins
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# (montage name, source folder relative to HERE)
+# Grouped by SHARED CONTEXT (the user's ask): each montage tiles graphs that are related by
+# the same x-axis context -> TIME, STOCK-PRICE(gap), or ROUND. (montage name, source folder)
 CATEGORIES = [
-    ("exit_up",              "exit_maps/{c}/up"),
-    ("exit_down",            "exit_maps/{c}/down"),
-    ("margin_up",            "exit_maps/{c}/up_margin"),
-    ("margin_down",          "exit_maps/{c}/down_margin"),
-    ("margin_up_filtered",   "exit_maps/{c}/up_margin_filtered"),
-    ("margin_down_filtered", "exit_maps/{c}/down_margin_filtered"),
-    ("rounds",               "round_charts/{c}"),
+    # TIME context: exit value vs entry-TIME (one tile per entry price)
+    ("time_up",            "exit_maps/{c}/up"),
+    ("time_down",          "exit_maps/{c}/down"),
+    # STOCK-PRICE context: exit value vs the price GAP from strike (one tile per entry price)
+    ("price_up",           "exit_maps/{c}/up_margin"),
+    ("price_down",         "exit_maps/{c}/down_margin"),
+    ("price_up_filtered",  "exit_maps/{c}/up_margin_filtered"),
+    ("price_down_filtered","exit_maps/{c}/down_margin_filtered"),
+    # ROUND context: the per-round price path (one tile per round)
+    ("rounds",             "round_charts/{c}"),
 ]
 
 
