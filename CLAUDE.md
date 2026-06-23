@@ -103,7 +103,7 @@ and its **Pyth** feed: `feeds.fetch_binance(symbol)` / `feeds.fetch_pyth(pyth_id
 resolved per-coin via `coins.py`. They track Chainlink within a few dollars, but the
 basis near the boundary can flip an outcome. Before trusting any edge, compare each proxy
 against the official `resolved_outcome`. (Note: `fetch_pyth` was once hardcoded to BTC —
-it is now per-coin, so alt `btc_pyth` columns finally hold the right asset.) A Chainlink
+it is now per-coin, so alt `price_pyth` columns finally hold the right asset.) A Chainlink
 adapter is a clean future drop-in.
 
 ## Architecture
@@ -112,7 +112,7 @@ adapter is a clean future drop-in.
 |------|------|
 | `coins.py` | **Coin registry + path authority.** Per-coin slug prefix / Binance symbol / Pyth id; `live_db`/`archive_dir`/`all_dbs`/`ensure_dirs`; `ENABLED`; `default_coin()` (env `ANALYSIS_COIN`). Legacy BTC fallback. |
 | `feeds.py` | Data sources: Gamma (metadata + resolution), CLOB (`/book` = odds), Binance, Pyth. `slug_for/fetch_market(ws, coin)`, `fetch_binance(symbol)`, `fetch_pyth(pyth_id)`. Stdlib HTTP. |
-| `storage.py` | SQLite schema + writers (coin-agnostic; opens whatever path it's given). Tables: `windows`, `snapshots` (REST) + `book_events`, `trades`, `btc_ticks` (WS). `prune_ws` retention. |
+| `storage.py` | SQLite schema + writers (coin-agnostic; opens whatever path it's given). Tables: `windows`, `snapshots` (REST) + `book_events`, `trades`, `price_ticks` (WS). `prune_ws` retention. |
 | `collector.py` | REST loop + fallback, **`--coin`**: discover live window → snapshot → strike/final → settle. Writes `data/<coin>/live.db`. |
 | `ws_collector.py` | Async WebSocket layer, **`--coin`**: market-channel events + Binance bookTicker → buffered writes; watchdog reconnect; per-coin `RETAIN_DAYS` prune. Needs `websockets`. |
 | `supervisor.py` | Launches + auto-restarts a collector pair **per `coins.ENABLED`** (windowless on Windows) + viewer + chart_capture. Stop via Ctrl-C or a `STOP` file. |
@@ -130,7 +130,7 @@ adapter is a clean future drop-in.
   `resolved_outcome` (official), `partial` (1 = joined mid-window, strike not exact).
 - **`snapshots`** — the time series: `ts` (unix epoch) + `ts_utc` (exact global
   time, ISO-8601 UTC, ms), `time_left`, `up_*`/`down_*` odds (bid/ask/mid/spread),
-  `up_book`/`down_book` (JSON top-10 depth), `btc_binance`, `btc_pyth`.
+  `up_book`/`down_book` (JSON top-10 depth), `price_binance`, `price_pyth`.
 - Join on `window_start`.
 
 Outcome token order: `outcomes` is `["Up","Down"]`, so `clobTokenIds[0]` = Up,
@@ -143,7 +143,7 @@ Outcome token order: `outcomes` is `["Up","Down"]`, so `clobTokenIds[0]` = Up,
   `tick_size_change`), `src_ts`, `hash`, `payload` (raw JSON verbatim).
 - **`trades`** — `last_trade_price` prints: `price`, `size`, `side` (BUY/SELL),
   `asset_id`, `window_start`, raw `payload`.
-- **`btc_ticks`** — Binance `@bookTicker`: `bid`, `ask`, `mid`, `update_id`.
+- **`price_ticks`** — Binance `@bookTicker`: `bid`, `ask`, `mid`, `update_id`.
 
 ## Run / verify
 
@@ -161,7 +161,7 @@ python peek.py --coin eth windows  # one row per 5-min market
 
 NOTE: the WS feed is high-volume (~10s of GB/day of `book_events` per active coin, so
 ~6× across all six). Retention EXISTS: `ws_collector`'s `pruner` calls
-`storage.prune_ws` to drop `book_events`/`btc_ticks` older than `RETAIN_DAYS` (default 3)
+`storage.prune_ws` to drop `book_events`/`price_ticks` older than `RETAIN_DAYS` (default 3)
 per coin; `windows`/`snapshots`/`trades` are kept long-term. Watch free space — lower
 `RETAIN_DAYS` or trim `coins.ENABLED` if disk gets tight.
 
