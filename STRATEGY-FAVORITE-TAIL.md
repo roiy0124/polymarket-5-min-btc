@@ -89,23 +89,33 @@ of the already-priced HIGH-score tercile — not a tradeable edge. The one genui
 at the favorite band (indistinguishable from random subset-leverage at ask≥0.90; only beats random at
 the 0.85 band, which is itself breakeven).
 
-## How it becomes a winner (the one live thread) — idea B, reframed
-The favorite-tail's efficiency is *intra-asset*: each coin's own quote already prices its own move, so no
-intra-asset gate works. The untested inefficiency is **cross-asset**: the ONE real signal (latency — BTC
-leads ~1s, sign-consistent 6/6) is dead intra-asset (already priced) but may be **un-priced cross-asset**
-on sleepier alts. So idea B is best framed not as a contemporaneous convergence trade (that was faint,
-corr ~0.02) but as a **forward cross-asset underpricing GATE**: use BTC's just-realized move as a *causal
-predictor* of an alt favorite's fair value, and gate the alt favorite-tail entry on "BTC says this alt
-should be a stronger favorite than its ask implies." Required build:
-1. **B Part 3:** per alt coin, `corr(BTC-move-implied edge, alt_outcome − alt_up_mid)` — is the cross-asset
-   signal unpriced by the alt quote? (DOGE→XRP first.)
-2. **`net_ev()` helper** (still UNBUILT): taker-entry fee `0.07·a·(1−a)`; maker-or-hold exit = 0;
-   −100% loss term; +capped maker rebate.
-3. **B2:** alt favorite-buy + BTC-forward-gate, net of the real alt spread, validated with the harness
-   proven here — **alt-only placebo + Wilson-LB-vs-breakeven + per-coin replication** (do NOT let BTC carry a pooled result).
-4. **One last favorite-tail sanity test before fully closing it:** latency-residual at the **0.85 ask band**
-   (the only place it beat random, P=0.014) with the alt-only placebo + Wilson bar; if it fails (likely),
-   favorite-tail selectivity is formally retired.
+## Idea B as a component — TESTED (2026-06-23): a real DIRECTION, not yet a deployable edge
+We routed idea B as a **risk-filter component** on the favorite-tail (NOT standalone, NOT the
+convergence/gap framing — that's dead, doge-driven noise): **SKIP an alt favorite-tail entry when BTC's
+last ~15s move OPPOSES the favorite** (`btc_sig = sign_fav · BTC_return_15s`; drop the most-opposing ~20%).
+Script: `experiment_b_component.py`; verified independently + by a 4-angle stress-test (`wf_c3533092`).
+
+**It is the first component whose DIRECTION is genuinely real.** At tl=30 / ask≥0.95, dropping the
+bottom-20% BTC-opposing windows lifts net EV to **+0.0151 vs +0.0037 baseline** (delta +0.011),
+consistent across all 5 alts and every leave-one-coin-out fold, with a **BTC-signal permutation placebo
+p=0.002** and a subset placebo p=0.004 (rules out subset-leverage and selection luck). Mechanism: it cuts
+the rare boundary-flip losers that the alt quote hasn't yet repriced from BTC's lead.
+
+**But it is NOT yet a deployable edge — DO NOT ARM.** Its only "Wilson-LB(win) > ask+fee breakeven" pass
+hangs on the gated subset having ~1 loss: **one additional losing window takes Wilson-LB back to breakeven**
+(drop-20%: 1 loss → +0.0038; +1 loss → 0.0000; +2 → −0.0035). The per-coin "replication" is mostly
+degenerate 0-loss subsets; the whole edge is cutting ~6 of 7 flip-losers over only **~25h ≈ one
+independent stretch** of cross-correlated coins. By our own loss=0 rule it does not clear the deployable bar.
+
+**PRE-REGISTERED hypothesis — lock now, re-test on FRESH data** (see memory `b-riskfilter-preregistered`):
+*tl=30, ask≥0.95, L=15s, skip `btc_sig` in the bottom ~20% (BTC opposes the favorite).* Re-evaluate ONLY
+after ≥2–4 more weeks of alt data accumulate **≥30–50 alt favorite-tail losers** (so the win-rate Wilson-LB
+is non-degenerate). This finding was in-sample-discovered (multiple-comparisons exposure); a clean
+pre-registered OOS re-test on fresh data is the ONLY thing that upgrades it from "intriguing direction" to
+"edge." Build `net_ev()` before any live use; `live_runner` stays GATED until it clears on fresh data.
+
+**Dead ends confirmed (do not revisit):** the gap/convergence framing (doge noise); BTC-confirming *entry*
+gate (hurts EV); B as a standalone trade; favorite-tail selectivity (all variants).
 
 ## Live wiring (GATED — do not arm until an edge clears validation)
 - `live_runner.py` exists but must NOT be armed until B2 shows a replicated, net-positive edge.

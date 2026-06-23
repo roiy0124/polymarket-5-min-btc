@@ -96,6 +96,17 @@ gap UNPRICED by the quote? If non-zero → **encode `net_ev()`** (taker-entry fe
 exit = 0; −100% term; +rebate) and run **B2** net of DOGE's real spread. Only D reopener = a FREE
 Chainlink replica from exchange feeds; only G reopener = true event-level OFI from `book_events` deltas.
 
+### B as a COMPONENT on the favorite-tail (2026-06-23, run + stress-tested wf_c3533092) — first real direction
+Routed idea B as a risk-filter: SKIP an alt favorite-tail entry when BTC's last ~15s move OPPOSES the
+favorite (`experiment_b_component.py`). The convergence/gap framing is DEAD (doge noise). The btc-opposing
+risk-filter is the FIRST genuinely directional, cross-coin-consistent, placebo-significant component:
+tl=30/ask≥0.95, drop bottom-20% BTC-opposing → net EV +0.0151 vs +0.0037 baseline, all 5 alts + every LOCO
+positive, BTC-signal permutation p=0.002, subset placebo p=0.004. BUT NOT deployable: its Wilson-LB>be pass
+hangs on the gated subset having ~1 loss (one more loss → breakeven), per-coin replication is mostly
+degenerate 0-loss subsets, and it's ~25h ≈ one independent stretch. PRE-REGISTERED for an OOS re-test on
+≥2–4 weeks more data (≥30–50 alt losers); `live_runner` GATED. So: a real lead, not yet a real edge —
+the combination program is exhausted at *deployable* altitude, with this one live hypothesis to validate forward.
+
 ---
 
 ## The core problem (why everything is hard)
