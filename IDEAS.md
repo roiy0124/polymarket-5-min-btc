@@ -33,15 +33,15 @@ price)`, net of fees, ideally replicating across coins (idea F). Predicting *dir
 worthless if the price has it. This is how we judge every candidate — exactly how SMT became
 idea B. (Strategy-survey deep research in flight: run `wf_28066528-bb1` → will spawn ideas G+.)
 
-## Index (status)
-- **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
-- **B. Cross-asset divergence scan (SMT)** — 🔴 DIAGNOSED (21.8h): convergence too faint to trade (pooled corr ~0.02, Epps); not standalone
+## Index (status) — updated by the 2026-06-23 full audit (see EXPERIMENTS.md "FULL IDEA AUDIT")
+- **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🔴 favorite-tail TESTED (first time): late favorites well-calibrated, pooled tail +0.003 EV/$1 CI[−0.005,+0.010] = breakeven, dead standalone. Exit policy (maker-rest-else-hold) KEPT. `net_ev` still UNBUILT (next, needed for B2).
+- **B. Cross-asset divergence scan (SMT)** — 🟡 **THE LIVE THREAD.** Underlying convergence is small-but-real (+0.031 CI[+0.004,+0.056]) but single-coin (DOGE); the DECISIVE Part 3 (gap vs the QUOTE = unpriced?) + B2 (net of cost) were NEVER run. Kill is PREMATURE. Next = Part 3 on DOGE→XRP.
 - ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
-- **G. Order-flow imbalance (OFI / queue) nudge** — 🟡 from strategy survey; weak on large coins, contemporaneous
-- **H. Digital-option fair-value benchmark** — 🟡 from survey; ≈ our fairvalue.py, already ~efficient; re-look away from ATM
-- **D. Settlement-basis edge (Chainlink vs Binance)** — 🔴 DEAD (21.8h): ~4.2% Binance/Chainlink disagreement but the quote already leans Chainlink 71% in those windows (market prices it)
-- **E. Maker-rebate harvesting at the tails** — 🟡 discussed → ruled out standalone; rebate kept as a net-EV +term
-- **F. Multi-coin as a measurement multiplier (meta)** — 🟢 discussed → ADOPT as standard evaluation methodology
+- **G. Order-flow imbalance (OFI / queue) nudge** — 🔴 TESTED (first time): snapshot QI is contemporaneous; 6-coin pooled corr(resid) +0.010 (CI incl 0); SOL/XRP negative net. Dead-AS-PROXY. Only reopener = true event-level OFI from book_events deltas (unbuilt).
+- **H. Digital-option fair-value benchmark** — 🔴 CLOSED: market Brier beats fair on every coin; pooled corr(signal,resid) −0.018 (CI incl 0); lone BNB positive is in-sample artifact. Fair loses at every horizon 60–270s.
+- **D. Settlement-basis edge (Chainlink vs Binance)** — 🔴 DEAD: ~4.1% flips; the boundary Chainlink-lean (88%) is a last-second artifact (decays to ~58% at 120s), tradeable category only 3–7%, residual trade loses net −0.06. Only reopener = a FREE Chainlink replica from exchange feeds.
+- **E. Maker-rebate harvesting at the tails** — 🔴 ruled out standalone; keep rebate as a capped +term in net_ev. Re-verify live rebateRate=0.20 (per-fee vs per-notional) before encoding.
+- **F. Multi-coin as a measurement multiplier (meta)** — 🟢 ADOPT, but power OVERSTATED: ~1.5 effective coins for market-wide edges (not 2–3×); ~6× only for idiosyncratic edges (B) → F pairs best with B.
 
 ## D. Settlement-basis edge (Chainlink vs Binance/Pyth)
 

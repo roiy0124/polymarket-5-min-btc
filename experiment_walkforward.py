@@ -49,9 +49,9 @@ OUT_CSV = os.path.join(HERE, "walkforward_trades.csv")
 WINDOW = 300.0
 
 
-def pick_db():
+def pick_db(coin="btc"):
     """The DB with the most resolved windows (the archive, after a reset)."""
-    cands = [DB_PATH] + sorted(glob.glob(os.path.join(OLD_DBS, "*.db")))
+    cands = coins.all_dbs(coin)
     best, best_n = None, -1
     for p in cands:
         if not os.path.exists(p):
@@ -68,13 +68,13 @@ def pick_db():
     return best, best_n
 
 
-def open_merged():
+def open_merged(coin="btc"):
     """Attach EVERY source DB (live + all archives) read-only and expose UNION views
     so unqualified `windows`/`snapshots`/`trades`/`book_events` queries see ALL data
     continuously. Fixes the post-reset split where new data lives in a separate DB
     from the archive. Returns (conn, [db paths])."""
     dbs = []
-    for p in [DB_PATH] + sorted(glob.glob(os.path.join(OLD_DBS, "*.db"))):
+    for p in coins.all_dbs(coin):
         if not os.path.exists(p):
             continue
         try:
@@ -176,15 +176,22 @@ def main():
     ap.add_argument("--lookbacks", default="6,12,24",
                     help="comma-separated lookback HOURS for the robustness check "
                          "(e.g. '8,12,16' to drop stale >16h data). Longest = primary sample.")
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS),
+                    help="which coin's data to analyze (default: env ANALYSIS_COIN or btc)")
+    ap.add_argument("--score-margin", type=float, default=None, dest="score_margin",
+                    help="SELECTIVITY gate: only trade signals whose EV-score exceeds the current "
+                         "generation's MEAN signal score by this margin (None = trade all qualifying)")
     args = ap.parse_args()
     cfg = vars(args)
     lb_hours = sorted(float(x) for x in args.lookbacks.split(","))
     lb_set = [(f"{h:g}h", h * 3600.0) for h in lb_hours]
 
-    db, nres = pick_db()
+    db, nres = pick_db(args.coin)
+    out_csv = os.path.join(HERE, f"walkforward_trades_{args.coin}.csv")
     if not db or nres <= 0:
-        print("no DB with resolved windows found.")
+        print(f"[{args.coin}] no DB with resolved windows found.")
         return
+    print(f"=== COIN: {args.coin.upper()} ===")
     print(f"data DB: {os.path.basename(db)}  ({nres} resolved windows)")
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     windows = load(conn)
@@ -202,8 +209,9 @@ def main():
     refresh = args.refresh_min * 60.0
     scfg = SafetyConfig(min_order_usd=0.5, max_order_usd=1e9)
 
+    sm = "off (trade all)" if args.score_margin is None else f"score>=mean+{args.score_margin:g}"
     print(f"walk-forward: {args.sim_hours:g}h, refresh {args.refresh_min:g}min, "
-          f"lookbacks={args.lookbacks}h, "
+          f"lookbacks={args.lookbacks}h, selectivity={sm}, "
           f"config min_frac={args.min_frac} min_roi={args.min_roi} min_ev={args.min_ev} "
           f"min_win={args.min_win}")
     print("=" * 84)
@@ -220,6 +228,9 @@ def main():
         past = [w for w in windows if w["ws"] + WINDOW <= T]
         cuts = [(name, T - secs) for name, secs in lb_set]
         sigs = generate_signals(past, cuts, cfg) if past else []
+        if args.score_margin is not None and sigs:    # selectivity: keep only above-mean scorers
+            mean_ev = sum(s["ev"] for s in sigs) / len(sigs)
+            sigs = [s for s in sigs if s["ev"] >= mean_ev + args.score_margin]
         traded = [ws for ws in all_ws if T <= ws < T + refresh and ws + WINDOW <= t_end]
         g_legs = g_fill = g_win = 0
         g_pnl = 0.0
@@ -257,7 +268,7 @@ def main():
 
     conn.close()
     if rows_out:
-        with open(OUT_CSV, "w", newline="") as f:
+        with open(out_csv, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(rows_out[0].keys()))
             w.writeheader()
             w.writerows(rows_out)
@@ -270,7 +281,7 @@ def main():
           f"win {tot_win}/{tot_fill} ({winpct:.0f}%)  total PnL {cum:+.2f}  "
           f"EV/$1-on-fill {ev_fill:+.2f}")
     print(f"  (out-of-sample: every leg traded on windows AFTER its signal was fit)")
-    print(f"  detail -> {os.path.basename(OUT_CSV)}")
+    print(f"  detail -> {os.path.basename(out_csv)}")
 
 
 if __name__ == "__main__":

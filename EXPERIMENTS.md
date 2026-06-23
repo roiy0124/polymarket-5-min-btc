@@ -21,6 +21,83 @@ killed (or kept) cheaply by measurement instead of expensively by trading.
 
 ---
 
+## 2026-06-23 — FULL IDEA AUDIT + PER-COIN REPLICATION (read this first)
+
+Re-ran/audited EVERY idea on current data (~22h alts, ~98h BTC); each verdict adversarially
+verified by an independent skeptic. Per-idea "potential / what's left to discover" detail is in
+agent memory `idea-audit-full-2026-06-23` + `passive-multicoin-dead`. Key meta-finding: the
+recorded numbers were generally **too OPTIMISTIC** (the taker charged no fee, the passive fill
+model fills you 100% in losers, "breakeven" cases are pre-fee) — so the kills are SAFER than
+the docs claimed. 9 of 10 verdicts robustly dead/breakeven; **only B has an unrun decisive test.**
+
+### BEST STRATEGY WE HAVE, AND HOW IT PERFORMS
+**We do NOT have a profitable strategy. Everything tested is net-negative or statistically
+breakeven after fees.** Ranked by how close to viable:
+
+1. **Favorite-tail taker, hold to resolution** (least-bad; best fit to the consistency goal) —
+   buy a deep favorite (ask ~0.90–0.97) late in the window; rest a maker sell at target, else
+   HOLD to 0/1 (never taker-exit). Pooled 6 coins, time-clustered: ask≥0.94 = **+0.003 EV/$1,
+   CI [−0.005,+0.010]**; hold-to-res ask≥0.90 = **+0.013, CI [−0.008,+0.031]**; ask≥0.95 = +0.006
+   [−0.016,+0.024]. Win-rate ~90–97% (realized ≈ ask), coverage ~every window, fee only 0.2–0.7%.
+   **= statistical BREAKEVEN, not a proven edge**, and the −100% flip tail is real (1 loss ≈
+   30–160 wins; losses occur even at 0.99+). (net_ev() to score it is still UNBUILT.)
+   **Selectivity tested + REJECTED (2026-06-23):** fixed score-margin (signal-finder), a D
+   risk-filter (its 100%-win is a zero-variance bootstrap artifact — Wilson-LB < ask breakeven),
+   a fair-value score gate (borderline HIGH>LOW, CIs include 0), and an ADAPTIVE consistency-
+   weighted walk-forward cutoff all FAIL to beat baseline OOS (adaptive +0.0038 ≈ baseline
+   +0.0046, CI incl 0). The in-sample ORACLE cutoff (+0.0133*) is overfit/look-ahead — NOT
+   tradeable; ORACLE−ADAPTIVE ≈ +0.0095 = pure overfit. You can't out-select a calibrated market;
+   a winner needs a FORWARD underpricing gate (idea B). Scripts: experiment_favorite_tail.py,
+   experiment_favtail_selectivity.py, experiment_favtail_adaptive.py.
+   STRESS-TEST (4 independent methods + reproduction, 2026-06-23, workflow wf_4345f501): confirmed
+   dead at the rigorous bar. Best forced candidate (top-50% fair-P−ask) = +0.0144 vs +0.0049, 6/6
+   EV-positive, but Wilson-LB(win) < ask+fee breakeven on EVERY coin + every leave-one-out fold,
+   per-coin stars are loss=0 artifacts, and the placebo clears only via BTC (alt-only placebo P=0.143
+   vs pooled 0.023). Only real signal = latency-residual (6/6 sign-consistent) but spread/fee-capped
+   at the favorite band. NEXT = idea B reframed as a FORWARD cross-asset (BTC→alt) underpricing gate
+   (route the latency signal cross-asset, where it isn't priced), validated with alt-only-placebo +
+   Wilson-LB-vs-breakeven + per-coin replication.
+2. **Fair-value taker** (~1s BTC→quote lead) — structurally soundest, but **−0.002…−0.004 EV/$1**
+   after the real 0.07·p·(1−p) entry fee. Negative.
+3. **Passive resting-limit / exit-map / nested** — **−0.31 EV/fill pooled** across 6 coins. Dead.
+
+### Per-idea verdicts
+| idea | status | fresh result | kill |
+|---|---|---|---|
+| A favorites-tail | dead standalone | late favorites well-calibrated; pooled tail +0.003 CI[−0.005,+0.010] | robust |
+| A exit policy | KEEP (sound) | maker-rest-at-target ELSE hold-to-res, never taker-exit | n/a |
+| B cross-asset SMT | **LIVE (Part 3 unrun)** | underlying conv +0.031 CI[+0.004,+0.056] but single-coin (DOGE); gap-vs-QUOTE never tested | premature |
+| D settlement basis | dead | 4.1% Binance↔Chainlink flips; quote prices it; residual trade loses net −0.06 | robust |
+| E maker-rebate | dead standalone | rebate ∝ p(1−p) → ~0 at tails; keep only as +term in net_ev | robust |
+| F multi-coin | adopt (overstated) | ~1.5 eff. coins for market-wide edges; ~6× only for idiosyncratic (B) | n/a |
+| G OFI/queue-imbalance | dead-as-proxy | snapshot QI contemporaneous; 6-coin pooled +0.010 CI incl 0; SOL/XRP neg net | robust |
+| H digital fair value | dead (closed) | market Brier beats fair on every coin; pooled corr(signal,resid) −0.018 | robust |
+| KNOW / trend (wall) | dead | residual ≈0 at all 15 lookback×horizon cells; Brier 0.11–0.13 | robust |
+| faster-feed taker | net-negative | −0.002…−0.004 EV/$1 after real fee (clairvoyant upper bound) | robust |
+| passive / nested | dead, all coins | pooled −0.31 EV/fill; every coin's best config FAILS OOS holdout | robust |
+
+### Per-coin passive simulation (walk-forward, 12h, 30-min refresh, OOS, real-trade fills)
+EV/$1-on-fill (window-clustered CI): btc −0.46[−0.87,+0.05] (n=24), eth −0.34*[−0.64,−0.01],
+sol −0.54*[−0.74,−0.32], xrp −0.88 (n=3), doge −0.04[−0.58,+0.59], bnb −0.13[−0.44,+0.18].
+**POOLED −0.31, CI [−0.46,−0.14]** (significant<0). Win% on fills 17–38% (vs ~80% mid-path) =
+adverse-selection collapse, replicated across coins.
+
+### Per-coin config brute-force (20 configs = base/nest × 3-lookback combos) + train/test holdout
+Every coin's in-sample-best combo FAILS out-of-sample: btc nest:4/16/24 −0.03→−0.11; eth −0.12→−0.11;
+sol +0.00→−0.08; xrp −0.07→−0.27; doge +0.11→−0.15; bnb −0.15→+0.01 ("holds" at +0.01 = noise).
+6/6 fail. BTC best-powered (n=1450) is the clincher (all 20 configs negative, no stable per-bucket
+config). Per-timeframe "best combos" (e.g. doge 15–18h +0.72) are hindsight argmax that evaporate OOS.
+(`experiment_walkforward.py` + `experiment_config_tod.py` are now `--coin`-aware; config_tod gained a
+train/test holdout + per-coin best-times. The A/D/G tests were ad-hoc — TODO: promote to repo scripts.)
+
+### NEXT STEP (the one live thread)
+**B Part 3** — `corr(gap, outcome − up_mid)` per coin, window-clustered, DOGE→XRP: is the divergence
+gap UNPRICED by the quote? If non-zero → **encode `net_ev()`** (taker-entry fee 0.07·a·(1−a); maker-or-hold
+exit = 0; −100% term; +rebate) and run **B2** net of DOGE's real spread. Only D reopener = a FREE
+Chainlink replica from exchange feeds; only G reopener = true event-level OFI from `book_events` deltas.
+
+---
+
 ## The core problem (why everything is hard)
 
 Each market resolves **0/1** (token → $1 or $0 at a 5-min boundary vs the Chainlink

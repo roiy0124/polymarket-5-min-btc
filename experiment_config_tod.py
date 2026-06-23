@@ -50,9 +50,13 @@ def main():
     ap.add_argument("--entry-hi", type=int, default=75, dest="entry_hi")
     ap.add_argument("--filt-frac", type=float, default=0.10, dest="filt_frac")
     ap.add_argument("--usd", type=float, default=2.0)
+    import coins
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS),
+                    help="which coin's data to analyze (default: env ANALYSIS_COIN or btc)")
     args = ap.parse_args()
 
-    conn, dbs = open_merged()
+    conn, dbs = open_merged(args.coin)
+    print(f"=== COIN: {args.coin.upper()} ===")
     windows = load_full(conn)
     cents = list(range(args.entry_lo, args.entry_hi + 1))
     dotmap, ws_arr, wdots, winmap = {}, {}, {}, {}
@@ -143,12 +147,12 @@ def main():
                     if sb:
                         r = do_replay(ws, token, side, sb)
                         if r:
-                            res[("base", cb)].append((r[0], r[1], sb["shares"] * sb["entry"], hour))
+                            res[("base", cb)].append((r[0], r[1], sb["shares"] * sb["entry"], hour, ws))
                     sn = armed[("nest", cb)].get((side, c))
                     if sn and g is not None and any(a <= g <= b for a, b in sn["zones"]):
                         r = do_replay(ws, token, side, sn)
                         if r:
-                            res[("nest", cb)].append((r[0], r[1], sn["shares"] * sn["entry"], hour))
+                            res[("nest", cb)].append((r[0], r[1], sn["shares"] * sn["entry"], hour, ws))
         T += REFRESH
 
     def ev(rows):
@@ -169,6 +173,8 @@ def main():
     ov = [(cfg, s) for cfg, s in ov if s and s[0] >= 30]
     for cfg, (n, e) in sorted(ov, key=lambda r: -r[1][1])[:8]:
         print(f"  {cname(cfg):>16}  n={n:>4}  EV/fill {e:>+5.2f}")
+    # this coin's own pooled-best config (replaces the BTC-hardcoded FIXED below)
+    best_cfg = max(ov, key=lambda r: r[1][1])[0] if ov else FIXED
 
     # PER TIME WINDOW best config
     print("\n=== best config per 3h time window (brute force) ===")
@@ -191,11 +197,11 @@ def main():
             print(f"  {b*3:02d}:00-{b*3+3:02d}:00 | (too few fills)")
 
     # BEST TIMES with ONE fixed config (honest -- no per-window argmax overfit)
-    print(f"\n=== best times to trade with the FIXED best config ({cname(FIXED)}) ===")
+    print(f"\n=== best times to trade with this coin's pooled-best config ({cname(best_cfg)}) ===")
     print("  (one strategy, fair across all hours -- this is the trustworthy 'when to trade')")
     rows_tod = []
     for b in range(8):
-        sub = [r for r in res.get(FIXED, []) if b * 3 <= r[3] < b * 3 + 3]
+        sub = [r for r in res.get(best_cfg, []) if b * 3 <= r[3] < b * 3 + 3]
         s = ev(sub)
         rows_tod.append((b, s))
     for b, s in sorted(rows_tod, key=lambda r: -(r[1][1] if r[1] else -9)):
@@ -203,6 +209,39 @@ def main():
             print(f"  {b*3:02d}:00-{b*3+3:02d}:00 : EV/fill {s[1]:>+5.2f}  (n={s[0]})")
         else:
             print(f"  {b*3:02d}:00-{b*3+3:02d}:00 : (too few fills)")
+
+    # TRAIN/TEST holdout — the honest overfit gate: choose best config on the first
+    # 60% of windows, then score THAT SAME config on the last 40% (out-of-sample).
+    print("\n=== TRAIN/TEST holdout (select best config in-sample, score it OOS) ===")
+    ws_sorted = sorted(winmap)
+    if len(ws_sorted) >= 20:
+        cut = ws_sorted[int(len(ws_sorted) * 0.6)]
+        def ev_span(rows, lo=None, hi=None):
+            f = [r for r in rows if r[0] and (lo is None or r[4] >= lo)
+                 and (hi is None or r[4] < hi)]
+            if not f:
+                return None
+            stk = sum(r[2] for r in f)
+            return (len(f), sum(r[1] for r in f) / stk if stk else 0.0)
+        cand = []
+        for cfg in configs:
+            s = ev_span(res[cfg], hi=cut)
+            if s and s[0] >= 15:
+                cand.append((cfg, s))
+        if cand:
+            bcfg, (ntr, etr) = max(cand, key=lambda r: r[1][1])
+            te = ev_span(res[bcfg], lo=cut)
+            print(f"  best on TRAIN (first 60%): {cname(bcfg)}  EV/fill {etr:+.2f} (n={ntr})")
+            if te:
+                verdict = "HOLDS OOS (>0)" if te[1] > 0 else "FAILS OOS (<=0) -> overfit"
+                print(f"  same config on TEST (last 40%): EV/fill {te[1]:+.2f} (n={te[0]})"
+                      f"  ->  {verdict}")
+            else:
+                print("  same config on TEST: no fills (combo too rare OOS) -> inconclusive")
+        else:
+            print("  not enough TRAIN fills for any config.")
+    else:
+        print("  too few windows for a train/test split.")
 
     # CONSISTENCY
     print("\n=== consistency ===")

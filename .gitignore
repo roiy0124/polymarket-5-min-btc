@@ -21,6 +21,7 @@ live_trades.csv
 experiment_trades.csv
 experiment_run.log
 walkforward_trades.csv
+walkforward_trades_*.csv
 config_sweep.csv
 live_runner.log
 .env
