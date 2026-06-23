@@ -40,6 +40,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EXIT_CATS = ["up", "down", "up_margin", "down_margin",
              "up_margin_filtered", "down_margin_filtered"]
 
+# HI-RES montage so you can ZOOM into cross-coin detail instead of a pixelated mesh. The old
+# tiles (2.7x2.1in @120dpi -> ~324px) downsampled the ~1140px source charts; these tiles are
+# sized >= the source pixels so imshow PRESERVES each coin's chart. --dpi overrides MONT_DPI.
+MONT_DPI = 200                 # montage output resolution
+TILE_W, TILE_H = 7.2, 4.2      # inches per coin tile (x200dpi -> ~1440x840px nominal, >= source charts)
+
 
 def _montage(items, outpath, title, cols):
     """items: list of (coin, png_path) in coin order. One tile per coin, titled in its color."""
@@ -47,17 +53,17 @@ def _montage(items, outpath, title, cols):
     if n == 0:
         return False
     rows = (n + cols - 1) // cols
-    fig = plt.figure(figsize=(cols * 2.7, rows * 2.1))
+    fig = plt.figure(figsize=(cols * TILE_W, rows * TILE_H))
     for i, (coin, p) in enumerate(items):
         ax = fig.add_subplot(rows, cols, i + 1)
         ax.axis("off")
         try:
-            ax.imshow(plt.imread(p))
+            ax.imshow(plt.imread(p), interpolation="lanczos")   # preserve source detail (no downsample mesh)
         except Exception:
             continue
-        ax.set_title(coin.upper(), fontsize=9, color=coins.color(coin), fontweight="bold")
-    fig.suptitle(title, fontsize=9)
-    fig.savefig(outpath, dpi=120, bbox_inches="tight")
+        ax.set_title(coin.upper(), fontsize=15, color=coins.color(coin), fontweight="bold")
+    fig.suptitle(title, fontsize=17)
+    fig.savefig(outpath, dpi=MONT_DPI, bbox_inches="tight")
     plt.close(fig)
     return True
 
@@ -116,12 +122,16 @@ def build(what="all", cols=6, min_coins=2):
 
 
 def main():
+    global MONT_DPI
     ap = argparse.ArgumentParser(description="cross-coin gathered montages")
     ap.add_argument("--what", default="all", choices=["all", "exit", "round"])
     ap.add_argument("--cols", type=int, default=6, help="tiles per row (default 6 = one row)")
     ap.add_argument("--min-coins", type=int, default=2, dest="min_coins",
                     help="only gather a graph present in >= this many coins")
+    ap.add_argument("--dpi", type=int, default=MONT_DPI,
+                    help=f"montage output DPI (default {MONT_DPI}; higher = crisper zoom, bigger files)")
     args = ap.parse_args()
+    MONT_DPI = args.dpi
     n = build(args.what, args.cols, args.min_coins)
     print(f"\ndone: {n} gathered montage(s) -> gathered/  (open gathered/exit_maps/<side>/ "
           f"and gathered/round_charts/)")

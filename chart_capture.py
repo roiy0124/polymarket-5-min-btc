@@ -80,7 +80,7 @@ def render(conn, ws, official_up=None):
     dn = [d for _, _, d, _ in snaps]
     btc = [b for _, _, _, b in snaps]
 
-    fig, ax = plt.subplots(figsize=(7.6, 4.4), dpi=90)
+    fig, ax = plt.subplots(figsize=(7.6, 4.4), dpi=170)   # hi-res so gathered montages stay crisp on zoom
     # --- left axis: token prices (0..1) ---
     ax.plot(xs, up, color="#3fb950", lw=1.4, label="Up  (our 1/sec data)")
     if any(d is not None for d in dn):

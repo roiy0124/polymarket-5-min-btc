@@ -197,7 +197,7 @@ def best_sell_window(dots, z):
 
 def make_plot(side, cent, dots, outpath, admit=True, min_line_n=0, coin="btc"):
     z = cent / 100.0
-    fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=85)
+    fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=140)
     if dots:
         gx = [x for x, y, c in dots if c == "g"]
         gy = [y for x, y, c in dots if c == "g"]
@@ -249,7 +249,7 @@ def make_plot(side, cent, dots, outpath, admit=True, min_line_n=0, coin="btc"):
     ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
     ax.grid(True, alpha=0.15)
     fig.tight_layout()
-    fig.savefig(outpath, bbox_inches="tight")
+    fig.savefig(outpath, bbox_inches="tight", dpi=140)
     plt.close(fig)
 
 
@@ -324,7 +324,7 @@ def make_margin_plot(side, cent, mdots, z, outpath, coin="btc"):
       purple line = chosen sell target;  green shaded span(s)+boundary lines = BUY
       zone(s) where the gap response beats breakeven for that sell; outside = no-buy.
     The (sell, zone) pair is the conditional-EV optimum (in-sample, illustrative)."""
-    fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=85)
+    fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=140)
     gx = [m for m, y, c in mdots if c == "g"]
     gy = [y for m, y, c in mdots if c == "g"]
     rx = [m for m, y, c in mdots if c == "r"]
@@ -355,7 +355,7 @@ def make_margin_plot(side, cent, mdots, z, outpath, coin="btc"):
     ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
     ax.grid(True, alpha=0.15)
     fig.tight_layout()
-    fig.savefig(outpath, bbox_inches="tight")
+    fig.savefig(outpath, bbox_inches="tight", dpi=140)
     plt.close(fig)
 
 

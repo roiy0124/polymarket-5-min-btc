@@ -128,7 +128,7 @@ adapter is a clean future drop-in.
 | `viewer.py` | Live browser dashboard (stdlib http.server, default `:8765`). Honors `ANALYSIS_COIN`. Read-only. |
 | `chart_capture.py` | Per-round price charts, **`--coin`** → `round_charts/<coin>/`. Coin-correct titles/labels + per-coin line color; price axis scales to the coin (low-priced coins not flat). Supervisor child (live) / `--once` (backfill). |
 | `analyze_all.py` | Run exit maps + round charts for many coins at once (per coin) **+ the cross-coin gathered montages** at the end. |
-| `make_gathered.py` | **Cross-coin montages**: tiles the SAME graph across all coins side by side → `gathered/exit_maps/<up\|down\|*_margin>/entry_NNc.png` and `gathered/round_charts/<round>.png`. Auto-run by menu 5/6 + analyze_all; menu `m` rebuilds. |
+| `make_gathered.py` | **Cross-coin montages**: tiles the SAME graph across all coins side by side → `gathered/exit_maps/<up\|down\|*_margin>/entry_NNc.png` and `gathered/round_charts/<round>.png`. Auto-run by menu 5/6 + analyze_all; menu `m` rebuilds. **HI-RES (2026-06-23):** source charts render at 140–170 dpi and the montage at 200 dpi with source-preserving tiles (~1120px/tile vs the old ~324px mesh) so you can ZOOM into cross-coin detail; `--dpi N` trades crispness vs file size. |
 
 ### Data model (per coin: `data/<coin>/live.db`, SQLite — gitignored; one DB per coin, identical schema)
 
