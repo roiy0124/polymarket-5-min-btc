@@ -447,6 +447,13 @@ def main():
     print(f"done [{args.coin}]. {len(windows)} settled windows. map admission floor: "
           f"n >= {threshold:.0f} dots. output -> {base}/"
           f"{{up,down,up_margin,down_margin,up_margin_filtered,down_margin_filtered}}")
+    # auto-build the matrix montages this generator owns (time_*, price_*)
+    try:
+        import make_matrix
+        make_matrix.build(args.coin, make_matrix.EXIT_NAMES, quiet=True)
+        print(f"  matrix montages updated -> matrix/{args.coin}/ (time_*, price_*)")
+    except Exception as e:
+        print(f"  (matrix montage skipped: {e!r})")
 
 
 if __name__ == "__main__":

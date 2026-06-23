@@ -170,6 +170,13 @@ def main():
     print(f"chart_capture: backfilled {n} round chart(s) -> {OUTDIR}", flush=True)
     if once:
         conn.close()
+        # auto-build the matrix montage this generator owns (rounds)
+        try:
+            import make_matrix
+            make_matrix.build(COIN, make_matrix.ROUND_NAMES, quiet=True)
+            print(f"chart_capture: matrix updated -> matrix/{COIN}/rounds.png", flush=True)
+        except Exception as e:
+            print(f"chart_capture: (matrix montage skipped: {e!r})", flush=True)
         return
 
     official = {}   # window_start -> official up points (fetched live near close)

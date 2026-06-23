@@ -304,7 +304,7 @@ MENU = [
     ("VISUALS", None),
     ("5", "Generate exit maps (per entry price; all coins or one)", a_exit_maps),
     ("6", "Generate round charts (backfill; all coins or one)", a_round_charts),
-    ("m", "Matrix montages (side-by-side grids of all graphs)", a_matrix),
+    ("m", "Matrix montages — REBUILD only (5 & 6 already auto-build them)", a_matrix),
     ("ANALYSIS", None),
     ("7", "Phase-1 SIGNAL FINDER (win/ROI floors -> signals.json)", a_signals),
     ("8", "Calibration test (price vs outcome)", a_calibration),

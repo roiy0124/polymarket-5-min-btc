@@ -53,6 +53,11 @@ CATEGORIES = [
     ("rounds",             "round_charts/{c}"),
 ]
 
+# which montages each generator owns (so building is automatic + scoped)
+EXIT_NAMES = ["time_up", "time_down", "price_up", "price_down",
+              "price_up_filtered", "price_down_filtered"]
+ROUND_NAMES = ["rounds"]
+
 
 def montage(pngs, outpath, cols, title, maxn):
     pngs = sorted(pngs)
@@ -77,6 +82,29 @@ def montage(pngs, outpath, cols, title, maxn):
     return n
 
 
+def build(coin, names=None, cols=10, maxn=120, quiet=False):
+    """(Re)build the matrix montages for one coin. `names` limits to a subset of
+    CATEGORIES (e.g. EXIT_NAMES or ROUND_NAMES) so each generator rebuilds only its
+    own montages. Returns how many were written. Safe to call from other scripts."""
+    if coin not in coins.COINS:
+        return 0
+    outdir = os.path.join(HERE, "matrix", coin)
+    os.makedirs(outdir, exist_ok=True)
+    made = 0
+    for name, tmpl in CATEGORIES:
+        if names is not None and name not in names:
+            continue
+        pngs = glob.glob(os.path.join(HERE, tmpl.format(c=coin), "*.png"))
+        if not pngs:
+            continue
+        out = os.path.join(outdir, f"{name}.png")
+        if montage(pngs, out, cols, f"{coin.upper()} {name}", maxn):
+            made += 1
+            if not quiet:
+                print(f"  {coin}/{name}: {len(pngs)} graphs -> {os.path.relpath(out, HERE)}")
+    return made
+
+
 def main():
     ap = argparse.ArgumentParser(description="tile per-coin graphs into matrix montages")
     ap.add_argument("--coin", default="all", help="coin or 'all' (default)")
@@ -89,20 +117,7 @@ def main():
     for c in cl:
         if c not in coins.COINS:
             print(f"  skip unknown coin {c}"); continue
-        outdir = os.path.join(HERE, "matrix", c)
-        os.makedirs(outdir, exist_ok=True)
-        made = 0
-        for name, tmpl in CATEGORIES:
-            src = os.path.join(HERE, tmpl.format(c=c))
-            pngs = glob.glob(os.path.join(src, "*.png"))
-            if not pngs:
-                continue
-            out = os.path.join(outdir, f"{name}.png")
-            k = montage(pngs, out, args.cols, f"{c.upper()} {name}", args.maxn)
-            if k:
-                print(f"  {c}/{name}: {k} graphs -> {os.path.relpath(out, HERE)}")
-                made += 1
-        if made == 0:
+        if build(c, cols=args.cols, maxn=args.maxn) == 0:
             print(f"  {c}: no source PNGs found (generate exit maps / round charts first)")
     print("\ndone. open matrix/<coin>/ for the side-by-side grids.")
 
