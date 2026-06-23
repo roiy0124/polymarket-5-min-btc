@@ -35,11 +35,11 @@ idea B. (Strategy-survey deep research in flight: run `wf_28066528-bb1` → will
 
 ## Index (status)
 - **A. Fee-aware net-EV signal selection** (was "late-window favorites") — 🟢 exit policy DECIDED (maker-rest-else-hold; never taker-exit); next = encode `net_ev` + wire into scorers
-- **B. Cross-asset divergence scan (SMT)** — 🟢 design agreed; B1 simple existence test next (absorbs C)
+- **B. Cross-asset divergence scan (SMT)** — 🔴 DIAGNOSED (21.8h): convergence too faint to trade (pooled corr ~0.02, Epps); not standalone
 - ~~C. Basket-divergence SMT~~ — **merged into B** (B is the scan-and-compare divergence)
 - **G. Order-flow imbalance (OFI / queue) nudge** — 🟡 from strategy survey; weak on large coins, contemporaneous
 - **H. Digital-option fair-value benchmark** — 🟡 from survey; ≈ our fairvalue.py, already ~efficient; re-look away from ATM
-- **D. Settlement-basis edge (Chainlink vs Binance)** — 🟢 discussed; free-only (replicate Chainlink), gated on disagreement-rate
+- **D. Settlement-basis edge (Chainlink vs Binance)** — 🔴 DEAD (21.8h): ~4.2% Binance/Chainlink disagreement but the quote already leans Chainlink 71% in those windows (market prices it)
 - **E. Maker-rebate harvesting at the tails** — 🟡 discussed → ruled out standalone; rebate kept as a net-EV +term
 - **F. Multi-coin as a measurement multiplier (meta)** — 🟢 discussed → ADOPT as standard evaluation methodology
 

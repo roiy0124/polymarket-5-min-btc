@@ -43,18 +43,22 @@ import coins
 
 
 def load_price_per_sec(coin, cutoff_ts):
-    """{int_second: last underlying price that second} from the coin's snapshots."""
-    db = coins.live_db(coin)
-    if not os.path.exists(db):
-        return {}
-    conn = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
-    rows = conn.execute(
-        "SELECT ts, price_binance FROM snapshots WHERE ts>=? AND price_binance IS NOT NULL "
-        "ORDER BY ts", (cutoff_ts,)).fetchall()
-    conn.close()
+    """{int_second: last underlying price} merged across the coin's live DB + ARCHIVES
+    (coins.all_dbs), so analysis includes archived data — e.g. when a coin's live DB was
+    reset via menu 19, its history is in data/<coin>/archive/. Dedupes by second."""
     out = {}
-    for ts, px in rows:
-        out[int(ts)] = px      # last price in that second
+    for db in coins.all_dbs(coin):
+        if not os.path.exists(db):
+            continue
+        conn = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+        try:
+            for ts, px in conn.execute(
+                    "SELECT ts, price_binance FROM snapshots WHERE ts>=? AND "
+                    "price_binance IS NOT NULL ORDER BY ts", (cutoff_ts,)):
+                out[int(ts)] = px      # last price in that second (overlaps dedupe by second)
+        except sqlite3.OperationalError:
+            pass
+        conn.close()
     return out
 
 
@@ -145,9 +149,9 @@ def main():
         print(f"  mean off-diagonal corr = {sum(corrs) / len(corrs):+.2f}  "
               f"(higher => divergences are meaningful)")
 
-    # ---- Part 2: do divergence gaps converge? ----
+    # ---- Part 2: do divergence gaps converge? (per-coin AND pooled) ----
     L, F = args.lookback, args.forward
-    samples = []   # (gap, forward_return)
+    per_coin = {c: [] for c in cl}   # coin -> [(gap, forward_return)]
     for c in cl:
         r = rets[c]
         peers = [p for p in cl if p != c]
@@ -156,7 +160,8 @@ def main():
             peer_back = sum(sum(rets[p][k - L:k]) for p in peers) / len(peers)
             gap = peer_back - own_back            # >0: peers rose more than c (c lagged up)
             fwd = sum(r[k:k + F])                 # c's next F bars
-            samples.append((gap, fwd))
+            per_coin[c].append((gap, fwd))
+    samples = [s for c in cl for s in per_coin[c]]
     gaps = [s[0] for s in samples]; fwds = [s[1] for s in samples]
     rc = pearson(gaps, fwds)
     # block bootstrap CI (blocks to respect autocorrelation)
@@ -186,9 +191,12 @@ def main():
     if ci:
         star = " *" if (ci[0] > 0 or ci[1] < 0) else ""
     cis = f"  95% CI [{ci[0]:+.3f},{ci[1]:+.3f}]{star}" if ci else ""
-    print(f"  corr(gap, forward_return) = {rc:+.3f}   (n={len(samples)}){cis}")
-    print(f"  >0 => laggards CATCH UP toward peers (SMT margin exists).  "
-          f"~0 => no convergence edge.")
+    print(f"  POOLED corr(gap, forward_return) = {rc:+.3f}   (n={len(samples)}){cis}")
+    print(f"  >0 => laggards CATCH UP (convergence).  <0 => SEESAW/reversal.  ~0 => no edge.")
+    print(f"  per-coin (pooling the leader dilutes; alts should show it more than btc):")
+    for c in cl:
+        rcc = pearson([s[0] for s in per_coin[c]], [s[1] for s in per_coin[c]])
+        print(f"    {c:>5}: corr={ (f'{rcc:+.3f}' if rcc is not None else ' n/a') }  (n={len(per_coin[c])})")
 
     print("\n  READ: high Part-1 corr + a clearly-positive Part-2 (CI excludes 0) => the SMT")
     print("  gap EXISTS and is informative -> next: is it unpriced (gap vs the QUOTE) and")
