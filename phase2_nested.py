@@ -24,6 +24,11 @@ import math
 import time
 import sqlite3
 
+# load_full / open_merged were archived to dead_ends/ (the nested passive idea is proven dead);
+# this gated paper executor still imports those shared libs from there.
+sys = __import__("sys")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "dead_ends"))
+
 from phase2 import get_market, book_queue, FIELDS
 from experiment_combined import load_full
 from experiment_walkforward import open_merged

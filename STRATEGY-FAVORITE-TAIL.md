@@ -9,9 +9,11 @@
 > - **Selectivity refinements were tested and REJECTED** — fixed margin, a D risk-filter, a fair-value score gate, and an adaptive (consistency-weighted, walk-forward) threshold all fail to beat the baseline out-of-sample (see "Selectivity tests"). **Do NOT adopt the in-sample ORACLE cutoff — it is overfit/look-ahead, untradeable.**
 > - It becomes a *winner* only by stacking a **forward underpricing** signal (idea B), not a smarter threshold.
 
-Test suite (all causal, read-only): `experiment_favorite_tail.py` (base + `--min-gap-bps` D filter),
-`experiment_favtail_selectivity.py` (score-tercile/margin cuts), `experiment_favtail_adaptive.py`
-(walk-forward adaptive cutoff). Reproduce base: `python experiment_favorite_tail.py --coin all --min-ask 0.95 --tl 30`.
+Tooling (all causal, read-only): `experiment_favorite_tail.py` (the base + `--min-gap-bps` D filter),
+`experiment_b_component.py` (the B risk-filter), `net_ev.py` (fee-aware EV accounting), and
+**`validate_b_riskfilter.py`** (the LOCKED pre-registered re-test). The rejected selectivity scripts
+(`favtail_selectivity`, `favtail_adaptive`) are archived in `dead_ends/`. Reproduce base:
+`python experiment_favorite_tail.py --coin all --min-ask 0.95 --tl 30`.
 
 ---
 
@@ -112,7 +114,12 @@ independent stretch** of cross-correlated coins. By our own loss=0 rule it does 
 after ≥2–4 more weeks of alt data accumulate **≥30–50 alt favorite-tail losers** (so the win-rate Wilson-LB
 is non-degenerate). This finding was in-sample-discovered (multiple-comparisons exposure); a clean
 pre-registered OOS re-test on fresh data is the ONLY thing that upgrades it from "intriguing direction" to
-"edge." Build `net_ev()` before any live use; `live_runner` stays GATED until it clears on fresh data.
+"edge." `net_ev()` is now built (`net_ev.py`); `live_runner` stays GATED until it clears on fresh data.
+
+**Re-test (push-button, zero knobs):** `python validate_b_riskfilter.py` — params LOCKED (tl=30, ask≥0.95,
+L=15s, gate = skip `btc_sig<0` = BTC opposes the favorite), evaluates ONLY post-pre-registration data,
+runs all four checks. The in-sample dry-run (`--all`) reproduces +0.0149 vs +0.0041 but **FAILS the
+non-degenerate-loss guard (1 loss < 30)** — exactly as it should until ~2–4 weeks more data accrue.
 
 **Dead ends confirmed (do not revisit):** the gap/convergence framing (doge noise); BTC-confirming *entry*
 gate (hurts EV); B as a standalone trade; favorite-tail selectivity (all variants).

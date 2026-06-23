@@ -107,6 +107,12 @@ degenerate 0-loss subsets, and it's ~25h ≈ one independent stretch. PRE-REGIST
 ≥2–4 weeks more data (≥30–50 alt losers); `live_runner` GATED. So: a real lead, not yet a real edge —
 the combination program is exhausted at *deployable* altitude, with this one live hypothesis to validate forward.
 
+**Tooling + repo layout (2026-06-23):** live strategy + tests in root — `experiment_favorite_tail.py`,
+`experiment_b_component.py`, `net_ev.py` (fee-aware accounting), `validate_b_riskfilter.py` (LOCKED
+push-button re-test; `--all` = in-sample dry-run). All **proven-dead experiments archived in `dead_ends/`**
+(walkforward/combined/config_tod/lookback_sweep/trend_outcome/lookahead_taker/xasset_smt/
+favtail_selectivity/favtail_adaptive) — see `dead_ends/README.md`.
+
 ---
 
 ## The core problem (why everything is hard)

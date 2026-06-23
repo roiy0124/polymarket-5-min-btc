@@ -198,5 +198,18 @@ Current direction: **cross-asset / SMT across the six coins** — do sleepier al
 lead each other, enough to clear the fee? That is *why* the multi-coin collection exists.
 `live_runner.py` stays **gated** and must NOT be armed until an edge clears validation.
 
+**UPDATE 2026-06-23 (full idea audit + combination program — see `STRATEGY-FAVORITE-TAIL.md`):**
+Best strategy = **favorite-tail taker, hold-to-resolution** (`experiment_favorite_tail.py`) — causal,
+real-time-implementable, but **BREAKEVEN** (pooled +0.005/$1, CI incl 0). Every idea was tested both
+standalone AND as a *component/gate* on it; all dead except ONE live thread: the **BTC-opposing
+risk-filter** (`experiment_b_component.py`) — skip an alt favorite-tail entry when BTC's last ~15s move
+opposes the favorite. First genuinely directional signal (permutation p=0.002, all-coin/LOCO) but NOT
+deployable yet (its Wilson pass hangs on a 1-loss subset over ~25h). **PRE-REGISTERED** (memory
+`b-riskfilter-preregistered`); re-test with **`validate_b_riskfilter.py`** (params LOCKED; `--all` =
+in-sample dry-run) after ~2–4 weeks more data. `net_ev.py` = the fee-aware EV helper. No new collection
+needed — just keep the running supervisor (don't start a 2nd = dup rows). **Proven-dead experiments are
+archived in `dead_ends/`** (see its README); the dead executors (`phase2*.py`, `paper_trade.py`) stay in
+root for `menu.py`, with `phase2_nested.py` bridging to the archived shared libs.
+
 Future drop-ins (when asked): a **Chainlink** price adapter in `feeds.py` to match
 resolution exactly; verified alt-specific tooling.
