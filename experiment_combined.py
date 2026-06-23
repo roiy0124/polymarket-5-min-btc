@@ -38,7 +38,7 @@ def load_full(conn):
             "SELECT window_start, resolved_outcome, strike_binance, token_up, token_down "
             "FROM windows WHERE resolved_outcome IN ('Up','Down') ORDER BY window_start"):
         snaps = conn.execute(
-            "SELECT time_left, up_mid, down_mid, btc_binance FROM snapshots "
+            "SELECT time_left, up_mid, down_mid, price_binance FROM snapshots "
             "WHERE window_start=? AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
         if not snaps:
             continue

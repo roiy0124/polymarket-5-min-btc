@@ -71,8 +71,8 @@ def path_for(conn, ws, side):
 def btc_path(conn, ws):
     """[(minutes_in, btc_price)] over the window (Binance)."""
     rows = conn.execute(
-        "SELECT time_left, btc_binance FROM snapshots WHERE window_start=? "
-        "AND btc_binance IS NOT NULL ORDER BY ts", (ws,)).fetchall()
+        "SELECT time_left, price_binance FROM snapshots WHERE window_start=? "
+        "AND price_binance IS NOT NULL ORDER BY ts", (ws,)).fetchall()
     return [(max(0.0, (WINDOW - tl) / 60.0), b) for tl, b in rows]
 
 

@@ -29,8 +29,8 @@ def summary(conn):
     try:
         nbook = conn.execute("SELECT COUNT(*) FROM book_events").fetchone()[0]
         ntrade = conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
-        nbtc = conn.execute("SELECT COUNT(*) FROM btc_ticks").fetchone()[0]
-        print(f"ws streams -> book_events: {nbook}   trades: {ntrade}   btc_ticks: {nbtc}")
+        nbtc = conn.execute("SELECT COUNT(*) FROM price_ticks").fetchone()[0]
+        print(f"ws streams -> book_events: {nbook}   trades: {ntrade}   price_ticks: {nbtc}")
     except sqlite3.OperationalError:
         pass
     print()
@@ -38,7 +38,7 @@ def summary(conn):
     print(f"{'utc time':>24} {'t-left':>7} {'up_bid':>7} {'up_ask':>7} {'up_mid':>7} "
           f"{'dn_mid':>7} {'binance':>11} {'pyth':>11}")
     rows = conn.execute(
-        """SELECT ts_utc, time_left, up_bid, up_ask, up_mid, down_mid, btc_binance, btc_pyth
+        """SELECT ts_utc, time_left, up_bid, up_ask, up_mid, down_mid, price_binance, price_pyth
            FROM snapshots ORDER BY ts DESC LIMIT 12"""
     ).fetchall()
     for r in reversed(rows):

@@ -46,8 +46,8 @@ CREATE TABLE IF NOT EXISTS snapshots (
     down_spread   REAL,
     up_book       TEXT,                 -- JSON: {"bids":[[p,s]...],"asks":[[p,s]...]}
     down_book     TEXT,
-    btc_binance   REAL,
-    btc_pyth      REAL
+    price_binance   REAL,
+    price_pyth      REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_snap_window ON snapshots(window_start);
@@ -92,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_recv ON trades(recv_ts);
 
 -- Low-latency BTC price ticks (Binance @bookTicker), event-driven on every
 -- top-of-book change -> best proxy for strike/current at the window boundary.
-CREATE TABLE IF NOT EXISTS btc_ticks (
+CREATE TABLE IF NOT EXISTS price_ticks (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     recv_ts       REAL NOT NULL,
     recv_utc      TEXT NOT NULL,
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS btc_ticks (
     mid           REAL,
     update_id     INTEGER
 );
-CREATE INDEX IF NOT EXISTS idx_btc_recv ON btc_ticks(recv_ts);
+CREATE INDEX IF NOT EXISTS idx_price_recv ON price_ticks(recv_ts);
 """
 
 
@@ -135,10 +135,10 @@ def insert_trades(conn, rows):
            VALUES (?,?,?,?,?,?,?,?,?)""", rows)
 
 
-def insert_btc_ticks(conn, rows):
+def insert_price_ticks(conn, rows):
     """rows: (recv_ts, recv_utc, source, bid, ask, mid, update_id)"""
     conn.executemany(
-        """INSERT INTO btc_ticks
+        """INSERT INTO price_ticks
                (recv_ts, recv_utc, source, bid, ask, mid, update_id)
            VALUES (?,?,?,?,?,?,?)""", rows)
 
@@ -153,7 +153,7 @@ def prune_ws(path, cutoff_ts):
         cur = conn.cursor()
         cur.execute("DELETE FROM book_events WHERE recv_ts < ?", (cutoff_ts,))
         n_book = cur.rowcount
-        cur.execute("DELETE FROM btc_ticks WHERE recv_ts < ?", (cutoff_ts,))
+        cur.execute("DELETE FROM price_ticks WHERE recv_ts < ?", (cutoff_ts,))
         n_btc = cur.rowcount
         conn.commit()
         return n_book, n_btc
@@ -227,7 +227,7 @@ def insert_snapshot(conn, window_start, ts, ts_utc, time_left, up, down, binance
         """INSERT INTO snapshots (window_start, ts, ts_utc, time_left,
                up_bid, up_ask, up_mid, up_spread,
                down_bid, down_ask, down_mid, down_spread,
-               up_book, down_book, btc_binance, btc_pyth)
+               up_book, down_book, price_binance, price_pyth)
            VALUES (?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?, ?,?)""",
         (window_start, ts, ts_utc, time_left,
          up.get("best_bid"), up.get("best_ask"), up.get("mid"), up.get("spread"),

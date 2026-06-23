@@ -71,7 +71,7 @@ def render(conn, ws, official_up=None):
         return False
     strike, final, our, official_outcome = row
     snaps = conn.execute(
-        "SELECT time_left, up_mid, down_mid, btc_binance FROM snapshots "
+        "SELECT time_left, up_mid, down_mid, price_binance FROM snapshots "
         "WHERE window_start=? AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
     if len(snaps) < 3:
         return False

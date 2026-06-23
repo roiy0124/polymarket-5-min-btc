@@ -67,7 +67,7 @@ def gather():
         # WS activity (range counts on indexed recv_ts are fast even on huge tables)
         for key, table, span in (("book_60s", "book_events", 60),
                                   ("trade_300s", "trades", 300),
-                                  ("btc_60s", "btc_ticks", 60)):
+                                  ("btc_60s", "price_ticks", 60)):
             try:
                 d[key] = _q1(conn, f"SELECT COUNT(*) FROM {table} WHERE recv_ts > ?", (now - span,)) or 0
                 d[key + "_total"] = _q1(conn, f"SELECT MAX(id) FROM {table}") or 0
@@ -78,7 +78,7 @@ def gather():
         # live window = latest snapshot
         d["live"] = conn.execute(
             """SELECT ts_utc, window_start, time_left, up_bid, up_ask, up_mid,
-                      down_mid, btc_binance, btc_pyth
+                      down_mid, price_binance, price_pyth
                FROM snapshots ORDER BY ts DESC LIMIT 1""").fetchone()
 
         # outcome split

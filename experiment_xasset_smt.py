@@ -49,7 +49,7 @@ def load_price_per_sec(coin, cutoff_ts):
         return {}
     conn = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
     rows = conn.execute(
-        "SELECT ts, btc_binance FROM snapshots WHERE ts>=? AND btc_binance IS NOT NULL "
+        "SELECT ts, price_binance FROM snapshots WHERE ts>=? AND price_binance IS NOT NULL "
         "ORDER BY ts", (cutoff_ts,)).fetchall()
     conn.close()
     out = {}

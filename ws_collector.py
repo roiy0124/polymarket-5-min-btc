@@ -13,7 +13,7 @@ fallback — the market WS has a documented "silent freeze" mode where it stays
 TCP/PING-healthy but stops sending data, so we never rely on it alone. A
 data-inactivity watchdog here force-reconnects after INACTIVITY_TIMEOUT seconds.
 
-Writes to the same btc_updown.db (tables: book_events, trades, btc_ticks).
+Writes to the same btc_updown.db (tables: book_events, trades, price_ticks).
 Raw event JSON is stored verbatim so the book can be reconstructed exactly
 offline. Run:  python ws_collector.py   (Ctrl-C to stop)
 
@@ -240,7 +240,7 @@ def _flush(state, conn):
         storage.insert_trades(conn, rows)
     if state.btc_buf:
         rows, state.btc_buf = state.btc_buf, []
-        storage.insert_btc_ticks(conn, rows)
+        storage.insert_price_ticks(conn, rows)
     conn.commit()
 
 
@@ -255,7 +255,7 @@ async def flusher(state, conn):
         if time.time() - last_report >= 30:
             s = state.stats
             print(f"[{time.strftime('%H:%M:%S')}] events  book={s['book']}  "
-                  f"trades={s['trade']}  btc_ticks={s['btc']}  "
+                  f"trades={s['trade']}  price_ticks={s['btc']}  "
                   f"reconnects={s['reconnects']} proactive={s['proactive']}", flush=True)
             last_report = time.time()
 
@@ -273,7 +273,7 @@ async def pruner(state):
             n_book, n_btc = await asyncio.to_thread(storage.prune_ws, state.db_path, cutoff)
             if n_book or n_btc:
                 print(f"[{time.strftime('%H:%M:%S')}] pruned book_events={n_book} "
-                      f"btc_ticks={n_btc} (older than {RETAIN_DAYS:.0f}d)", flush=True)
+                      f"price_ticks={n_btc} (older than {RETAIN_DAYS:.0f}d)", flush=True)
         except Exception as e:
             print(f"[{time.strftime('%H:%M:%S')}] prune error: {e!r}", flush=True)
 

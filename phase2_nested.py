@@ -129,8 +129,8 @@ def main():
                            (leg.ws,)).fetchone()
         if not row or row[0] is None:
             return False
-        btc = conn.execute("SELECT btc_binance FROM snapshots WHERE window_start=? AND "
-                           "btc_binance IS NOT NULL ORDER BY ts DESC LIMIT 1",
+        btc = conn.execute("SELECT price_binance FROM snapshots WHERE window_start=? AND "
+                           "price_binance IS NOT NULL ORDER BY ts DESC LIMIT 1",
                            (leg.ws,)).fetchone()
         if not btc or btc[0] is None:
             return False

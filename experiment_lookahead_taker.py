@@ -32,7 +32,7 @@ Three measurements:
       concentrate in high-vol hours. We test that directly.
 
 Reads btc_updown.db + old_dbs/*.db (per-DB; windows disjoint). Sub-second BTC from
-btc_ticks (~50-85/s); taker prices from 1Hz snapshots. Stdlib only.
+price_ticks (~50-85/s); taker prices from 1Hz snapshots. Stdlib only.
 
     python experiment_lookahead_taker.py
     python experiment_lookahead_taker.py --edge 0.04 --exit-lag 1 --lead 1
@@ -197,13 +197,13 @@ def main():
         n_dbs += 1
         for ws, K, outcome in wins:
             snaps = conn.execute(
-                "SELECT ts, time_left, up_bid, up_ask, down_bid, down_ask, btc_binance "
-                "FROM snapshots WHERE window_start=? AND btc_binance IS NOT NULL "
+                "SELECT ts, time_left, up_bid, up_ask, down_bid, down_ask, price_binance "
+                "FROM snapshots WHERE window_start=? AND price_binance IS NOT NULL "
                 "AND up_ask IS NOT NULL ORDER BY ts", (ws,)).fetchall()
             if len(snaps) < 12:
                 continue
             ticks = conn.execute(
-                "SELECT recv_ts, mid FROM btc_ticks WHERE recv_ts>=? AND recv_ts<=? "
+                "SELECT recv_ts, mid FROM price_ticks WHERE recv_ts>=? AND recv_ts<=? "
                 "AND mid IS NOT NULL ORDER BY recv_ts", (ws - 2, ws + WINDOW + 5)).fetchall()
             if len(ticks) < 50:
                 continue

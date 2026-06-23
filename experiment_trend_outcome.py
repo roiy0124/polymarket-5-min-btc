@@ -86,8 +86,8 @@ def main():
     rows = []   # (outcome, market, {lb: trend_return})
     for ws, outcome, K in windows:
         snaps = conn.execute(
-            "SELECT time_left, btc_binance, up_mid FROM snapshots WHERE window_start=? "
-            "AND btc_binance IS NOT NULL AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
+            "SELECT time_left, price_binance, up_mid FROM snapshots WHERE window_start=? "
+            "AND price_binance IS NOT NULL AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
         if len(snaps) < 20:
             continue
         tl = [s[0] for s in snaps]; btc = [s[1] for s in snaps]; mid = [s[2] for s in snaps]

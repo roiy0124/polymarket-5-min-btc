@@ -24,7 +24,7 @@ def _source_dbs(coin="btc"):
 def _merged_connection(days, coin="btc"):
     """In-memory DB of windows+snapshots from the last `days` days, merged across
     the current DB and every archive in old_dbs/. Stream tables (book_events/trades/
-    btc_ticks) are created empty (too big to merge; only price analyses use this)."""
+    price_ticks) are created empty (too big to merge; only price analyses use this)."""
     cutoff = time.time() - float(days) * 86400.0
     sources = _source_dbs(coin)
     mem = sqlite3.connect(":memory:")
