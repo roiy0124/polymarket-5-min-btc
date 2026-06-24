@@ -236,5 +236,14 @@ pre-registered **B risk-filter** (`validate_b_riskfilter.py`, LOCKED). New **`wi
 honest tiered roster (Tier 1 deployable-winner = empty; Tier 2 = favorite-tail proven-causal-breakeven; Tier 3 =
 B risk-filter + spot lead-lag, pre-registered). `live_runner` stays GATED.
 
+**REVISIT WATCHLIST (don't forget parked-but-real ideas):** the **fear stock-sell** idea (token-vs-token) is
+PARKED in `ideas_old/` — its FOLLOW flip (buy Down on an alt token dumping un-proportionately to peer tokens) is a
+**real all-6-coin signal (resid +0.055) that is only fee-capped**, not dead. **Re-check it** (`python
+ideas_old/experiment_token_fear.py --follow`) when `n_fired ≳ 1800` (~a few more months of the collector) OR if
+the 5-min taker fee drops / a fee-free maker-Down entry works / Down spreads tighten — viable iff
+Wilson-LB(win)>breakeven AND placebo p<0.05 (params LOCKED, no re-tune). See `IDEAS.md` "Revisit watchlist" +
+`ideas_old/fear-stock-sell.md`. New folders this session: `winning_strategies/` (roster), `shared_tools/`
+(reusable primitives index), `ideas_old/` (parked ideas), plus `analysis/spot_data.py` + `analysis/cross_asset_factor.py`.
+
 Future drop-ins (when asked): a **Chainlink** price adapter in `feeds.py` to match
 resolution exactly; verified alt-specific tooling.
