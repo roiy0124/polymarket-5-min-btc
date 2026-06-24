@@ -44,12 +44,19 @@ negative or insufficient as data accrued** — the textbook deflated-Sharpe null
   0.004), and the maker side is adverse-selected (filled when wrong). Even a perfect noise-window maker
   earns ~0.4% on a fairly-priced bet while bearing the −100% tail — not a retail edge.
 
-## 3. The one corner we could not settle (low prior)
+## 3. The one corner we could not settle (low prior) — and we tried
 
-**Maker liquidity-provision in cross-venue-confirmed noise windows.** It is the only theoretically-open
-cell, but (a) its income ceiling is the ~0.4% rebate, (b) it requires winning the adverse-selection
-battle the passive branch already lost, and (c) it **cannot be tested on our ~2 days of thin token data
-with unobservable queue position** — it needs live liquidity provision. Prior: low.
+**Maker liquidity-provision in mid-price "noise" windows** is the only theoretically-open cell (fee-free
++ rebate). The quality audit correctly noted it's testable *in principle* — the `queue_ahead` fill-model
+engine exists (`analysis/backtest.py`) and `book_events` carries the depth. So we built it
+(`experiment_maker_noise.py`: rest a maker bid in p∈[0.35,0.65] low-toxicity windows, model the fill from
+the real book + SELL prints, hold to 0/1, credit the rebate, no taker fee) and ran it through the gate.
+
+**Result: 0 modeled fills.** On our data the cell is essentially **empty** — mid-band moments with enough
+book depth *and* qualifying sell-flow *and* a low-toxicity reading are vanishingly rare (the token is
+decisive most of the window; `book_events` 3-day retention thins it further). So even the one un-mined
+corner cannot be populated here. Its income ceiling is the ~0.4% rebate, it must still beat the
+adverse-selection the passive branch lost to, and settling it needs **live liquidity provision**. Prior: low.
 
 ## 4. The methodology that's wrong everywhere else, and what we fixed
 
@@ -68,13 +75,27 @@ every future idea now gets an honest verdict instead of an n=18 mirage.
    marginal real edge (if any) needs months to clear deflation. The collector keeps running; re-gate
    the pre-registered candidates only when losers ≥ 30–50, and only believe a *deflated* pass.
 
-## 6. Honest one-line verdict
+## 6. Past-experiment audit (all 25, second-mind reviewed)
+
+A 4-expert panel graded every experiment for quality + whether its conclusion survives the rigor standard.
+The one systemic defect: **only `analysis/stats.py`, `analysis/audit_candidates.py` and the basket import
+the rigor module — every other experiment used the naive mean+Wilson+row-resampled placebo.** That inflated
+the borderline positives. But the asymmetry saves us: **a negative/dead conclusion is robust** (deflation
+only deepens a kill), so the 18 dead experiments stay dead. Of the claimed-positives, all were re-run and
+**overturned in the safe direction**: favorite-tail (→ negative), peer-surge/after-recovery (→ negative),
+B-component STEP-2 (→ NOT VALIDATED). The only "needs more data" item is spike-fade (n=18, prior LOW). The
+real signals that *exist* (spot lead-lag r≈0.12, B STEP-1) are confirmed — they just don't survive translation
+to net EV past the quote + fee.
+
+## 7. Honest one-line verdict
 
 > On this market, as it stands, there is **no demonstrable retail edge**: it is efficient-on-knowledge,
 > fee-taxed exactly where the edge would be, and negatively-skewed; the few positive flickers were the
-> best-of-N noise the deflated-Sharpe predicts, and they vanished under an honest test.
+> best-of-N noise the deflated-Sharpe predicts, and they vanished under an honest test. A real cross-asset
+> signal *is* present, but the quote already prices it and the verified 0.07·p·(1−p) fee + spread sink
+> every translation net-negative — efficient on knowledge **and** walled on execution.
 
-*Evidence: `analysis/stats.py`, `analysis/audit_candidates.py`, `experiment_residual_basket.py`,
-`experiment_fear_dip_variants.py`, `feeds.fetch_fee_schedule`; memory `program-walled-verdict`,
-`best-strategy-favorite-tail`, `market-efficient-no-knowledge-edge`. (Past-experiment quality audit folded
-in from wf_08502ec3.)*
+*Evidence (all committed): `analysis/stats.py` (the rigor module), `analysis/audit_candidates.py`,
+`experiment_residual_basket.py`, `experiment_maker_noise.py`, `experiment_fear_dip_variants.py`,
+`feeds.fetch_fee_schedule`; memory `program-walled-verdict`, `best-strategy-favorite-tail`,
+`market-efficient-no-knowledge-edge`. Past-experiment audit: wf_08502ec3 (25 experiments graded).*

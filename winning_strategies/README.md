@@ -1,5 +1,14 @@
 # winning_strategies/
 
+> **⚠️ STATUS 2026-06-25 — Tier 1 is EMPTY and the roster did not survive the rigor pass.**
+> A deflated, cluster-robust re-test (`analysis/stats.py`) overturned the candidates below:
+> **favorite-tail is NET-NEGATIVE** (not "breakeven"; pooled −0.0029, deflated p=1.0), the
+> **B risk-filter** is dying (forward EV negative, gates a negative base), the **spike-fade** is
+> INSUFFICIENT (n=18), and the **lead-lag** is a real predictor the quote already prices. The
+> borderline "pulses" were best-of-N noise that regressed negative on more data. **No deployable
+> edge exists — see `../POSTMORTEM.md`.** The cards below are kept as the honest historical record;
+> do not read them as live winners. Gate any future idea through `analysis/stats.assess`.
+
 The curated roster of strategies that have earned a place — with an **honest tier**
 on each, because on this market the difference between "predicts" and "pays" is the
 whole game (the market is calibrated; a signal that's real can still be fully priced).

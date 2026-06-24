@@ -44,6 +44,13 @@ idea B. (Strategy-survey deep research in flight: run `wf_28066528-bb1` → will
 - **F. Multi-coin as a measurement multiplier (meta)** — 🟢 ADOPT, but power OVERSTATED: ~1.5 effective coins for market-wide edges (not 2–3×); ~6× only for idiosyncratic edges (B) → F pairs best with B.
 
 ## Pre-registered candidates (real direction, params LOCKED, awaiting OOS on more data)
+> **RIGOR PASS 2026-06-25 (see `POSTMORTEM.md`):** all of these FAILED the deflated, cluster-robust re-test.
+> **Peer-surge / after-recovery reversion: RETIRED** (re-run flipped to net-negative, deflated p=1.0 — the
+> "+0.03 borderline" was best-of-N noise). **B risk-filter: dying** (locked OOS validator returns NOT VALIDATED,
+> gated EV −0.0017, 8 losers<30). **Spike-gated fade: INSUFFICIENT** (n=18) — its ONLY remaining status is
+> "blocked on data"; prior is now LOW it survives (both reversion siblings regressed negative on doubled data).
+> Do NOT believe any of these without a *deflated* pass at n_loss≥30. The base they sit on (favorite-tail) is
+> net-negative, so gating it can't create alpha.
 - **Idiosyncratic-spike → spike-gated FADE** 🟡 — premise CONFIRMED (idiosyncratic spot spikes partially mean-revert ~15-20%, all scales, SOL/DOGE strong, BNB none — `analysis/idio_reversion.py`, 5.5yr 1s). The combined test (`experiment_spike_fade.py`): gate the dead fear-fade on the alt's OWN idiosyncratic spot z<-3 → resid **+0.115, EV +0.168, all 4 alts positive** — the predicted "noise spike → token over-reacts → fade pays" signature. **BUT n=18 (~1σ, not significant; Wilson<be; placebo couldn't run).** PRE-REGISTERED (LOCKED: drop≤-0.05/30s, spot z<-3, hl300, buy Up hold-0/1, band 0.20-0.85) → re-run `experiment_spike_fade.py` after ≥2-4 wks more alt-token data (need n≥40-50 w/ losers); promote iff resid stays >0 & >all-dumps & placebo p<0.05 & Wilson-LB>be & cross-coin. Do NOT loosen to chase n. Memory `idiosyncratic-spike-idea`.
 - (also: **B risk-filter** `validate_b_riskfilter.py` — see Index B above.)
 
