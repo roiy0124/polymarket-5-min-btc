@@ -56,8 +56,10 @@ def psr(returns, sr_star: float = 0.0) -> float:
     sr = sharpe(r)
     g3 = float(_ss.skew(r, bias=False))
     g4 = float(_ss.kurtosis(r, fisher=False, bias=False))      # non-excess (normal=3)
-    denom = math.sqrt(max(1e-12, 1.0 - g3 * sr + ((g4 - 1.0) / 4.0) * sr * sr))
-    return float(_PHI((sr - sr_star) * math.sqrt(n - 1) / denom))
+    radic = 1.0 - g3 * sr + ((g4 - 1.0) / 4.0) * sr * sr        # B5: don't clamp a domain violation
+    if radic <= 0:
+        return float("nan")                                    # Edgeworth expansion invalid here
+    return float(_PHI((sr - sr_star) * math.sqrt(n - 1) / math.sqrt(radic)))
 
 
 def expected_max_sharpe(n_trials: int, var_trial_sharpe: float) -> float:
@@ -77,11 +79,15 @@ def deflated_sharpe(returns, n_trials: int, var_trial_sharpe: float | None = Non
     r = np.asarray(returns, float); r = r[np.isfinite(r)]
     n = len(r)
     if n < 3:
-        return dict(dsr=float("nan"), sr0=float("nan"), sr=float("nan"), n=n, n_trials=n_trials)
-    if var_trial_sharpe is None:
-        var_trial_sharpe = 1.0 / (n - 1)                       # null Sharpe-estimator variance
+        return dict(dsr=float("nan"), sr0=float("nan"), sr=float("nan"), n=n, n_trials=n_trials, fallback=True)
+    fallback = var_trial_sharpe is None
+    if fallback:
+        # B2: the 1/(n-1) sampling-var of ONE Sharpe UNDER-deflates 4-9x vs the cross-trial variance
+        # Bailey-LdP's E[max] needs. Floor it and FLAG it; supply the real value via TrialsLedger.
+        var_trial_sharpe = max(1.0 / (n - 1), 0.05)
     sr0 = expected_max_sharpe(n_trials, var_trial_sharpe)
-    return dict(dsr=psr(r, sr0), sr0=sr0, sr=sharpe(r), n=n, n_trials=n_trials, skew=float(_ss.skew(r, bias=False)))
+    return dict(dsr=psr(r, sr0), sr0=sr0, sr=sharpe(r), n=n, n_trials=n_trials,
+                skew=float(_ss.skew(r, bias=False)), fallback=fallback)
 
 
 def min_track_record_len(returns, sr_star: float = 0.0, prob: float = 0.95) -> float:
@@ -117,7 +123,10 @@ def purged_kfold(window_ids, k: int = 5, embargo: int = 0):
     but blocking by window prevents same-window cross-coin leakage."""
     window_ids = np.asarray(window_ids)
     uniq = np.unique(window_ids)                      # sorted
-    folds = np.array_split(uniq, k)
+    if len(uniq) < 2:                                 # B3: don't crash on thin subsets
+        return
+    k = max(1, min(k, len(uniq)))
+    folds = [f for f in np.array_split(uniq, k) if f.size > 0]
     for f in folds:
         test_w = set(f.tolist())
         lo, hi = f.min(), f.max()
@@ -160,26 +169,6 @@ def binary_bet_returns(asks, wons, entry="taker", exit="hold"):
     return np.array([net_ev_per_dollar(float(a), int(w), entry, exit) for a, w in zip(asks, wons)], float)
 
 
-def assess(asks, wons, clusters, n_trials: int, label: str = "", side_price=None) -> dict:
-    """One-stop honest verdict on a set of binary bets. asks/wons per bet; clusters = window ids
-    for the cluster-bootstrap; n_trials = HONEST number of configs/coins/thresholds searched to find
-    this. Returns Sharpe/PSR/DSR + cluster-CI on net EV + residual + win-rate Wilson, and a verdict."""
-    asks = np.asarray(asks, float); wons = np.asarray(wons, float)
-    r = binary_bet_returns(asks, wons)
-    n = len(r); k = int(wons.sum())
-    ds = deflated_sharpe(r, n_trials)
-    ev, lo, hi = cluster_bootstrap_ci(r, clusters)
-    price = np.asarray(side_price, float) if side_price is not None else asks
-    resid = wons.mean() - price.mean()
-    wlb = wilson_lb(k, n)
-    be = breakeven_winrate(float(asks.mean()))
-    survives = (ds["dsr"] >= 0.95) and (lo > 0) and (wlb > be) and (n >= 30)
-    return dict(label=label, n=n, n_loss=n - k, win=k / n if n else float("nan"),
-                mean_ev=ev, ci=(lo, hi), resid=resid, sharpe=ds["sr"], psr0=psr(r, 0.0),
-                dsr=ds["dsr"], sr0=ds["sr0"], skew=ds.get("skew"), wlb=wlb, be=be,
-                n_trials=n_trials, SURVIVES=bool(survives))
-
-
 def wilson_lb(k: int, n: int, z: float = 1.96) -> float:
     """One-sided Wilson lower bound of a win-rate (re-export-compatible with net_ev's)."""
     if n == 0:
@@ -188,13 +177,76 @@ def wilson_lb(k: int, n: int, z: float = 1.96) -> float:
     return float((p + z * z / (2 * n) - z * math.sqrt((p * (1 - p) + z * z / (4 * n)) / n)) / (1 + z * z / n))
 
 
+# ----------------------------------------------------------------- THE PRIMARY (right) object
+MIN_LOSS = 30          # below this, loss-light -> CI/Sharpe degenerate -> verdict = INSUFFICIENT
+N_PROGRAM = 200        # committed program-level effective trial count (16 experiments x ideas A-H x
+                       # 6 coins x sweep points ~ several hundred); override per call with the honest count
+
+
+def neff(rho: float, m: int) -> float:
+    """Effective independent count among m series with avg pairwise correlation rho (Neff=m/(1+(m-1)rho))."""
+    if m <= 1:
+        return float(m)
+    return m / (1.0 + (m - 1) * rho)
+
+
+def deflated_resid_p(values, clusters, n_trials: int = N_PROGRAM, B: int = 10000, seed: int = 11):
+    """PRIMARY test (the economically correct object, per the rigor critique): one-sided
+    cluster-bootstrap p that mean(values) > 0, then DEFLATED for n_trials via Sidak: p_def=1-(1-p)^N.
+    `values` = per-position net EV (fee-aware) or residual (won-price). Cluster-resampling makes it
+    Neff-aware for cross-coin within-window correlation, so we do NOT also pretend each row is i.i.d.
+    Returns (mean, lo, hi, p_single, p_deflated)."""
+    values = np.asarray(values, float); clusters = np.asarray(clusters)
+    good = np.isfinite(values)
+    values, clusters = values[good], clusters[good]
+    uniq = np.unique(clusters)
+    if len(uniq) < 5:
+        m = float(values.mean()) if len(values) else float("nan")
+        return m, float("nan"), float("nan"), float("nan"), float("nan")
+    idx_by = {c: np.where(clusters == c)[0] for c in uniq}
+    rng = np.random.default_rng(seed)
+    boot = np.empty(B)
+    for b in range(B):
+        pick = rng.choice(uniq, len(uniq), replace=True)
+        boot[b] = values[np.concatenate([idx_by[c] for c in pick])].mean()
+    p_single = float(np.mean(boot <= 0.0))                       # one-sided P(mean <= 0)
+    p_def = 1.0 - (1.0 - p_single) ** max(1, int(n_trials))      # Sidak deflation for best-of-N
+    return float(values.mean()), float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5)), p_single, float(p_def)
+
+
+def assess(asks, wons, clusters, n_trials: int = N_PROGRAM, label: str = "", side_price=None) -> dict:
+    """Honest verdict on a set of binary bets. PRIMARY gate = the deflated cluster-bootstrap p on the
+    fee-aware net-EV stream (the right object) AND the cluster-CI excludes 0 AND n_loss>=MIN_LOSS.
+    Sharpe / PSR / DSR are PRESENTATION only (per-bet Sharpe is a monotone function of win-rate, so it
+    is the SAME test as Wilson-LB and must not be double-counted in the gate). n_trials = HONEST count."""
+    asks = np.asarray(asks, float); wons = np.asarray(wons, float); clusters = np.asarray(clusters)
+    r = binary_bet_returns(asks, wons)
+    n = len(r); k = int(wons.sum()); n_loss = n - k
+    mean_ev, lo, hi, p1, pdef = deflated_resid_p(r, clusters, n_trials)
+    price = np.asarray(side_price, float) if side_price is not None else asks
+    resid = float(wons.mean() - price.mean())
+    ds = deflated_sharpe(r, n_trials)                            # presentation only
+    wlb = wilson_lb(k, n); be = breakeven_winrate(float(asks.mean()))
+    if n_loss < MIN_LOSS:                                        # B4: loss-light -> CI/PSR undefined
+        verdict, survives = f"INSUFFICIENT (n_loss={n_loss}<{MIN_LOSS})", False
+    else:
+        survives = bool(np.isfinite(pdef) and pdef < 0.05 and lo > 0)
+        verdict = "SURVIVES" if survives else "FAILS"
+    return dict(label=label, n=n, n_loss=n_loss, win=k / n if n else float("nan"),
+                mean_ev=mean_ev, ci=(lo, hi), resid=resid, p_single=p1, p_deflated=pdef,
+                sharpe=ds["sr"], psr0=psr(r, 0.0), dsr=ds["dsr"], dsr_fallback=ds.get("fallback"),
+                skew=ds.get("skew"), wlb=wlb, be=be, n_trials=n_trials, verdict=verdict, SURVIVES=survives)
+
+
 def print_assess(a: dict):
-    print(f"  [{a['label']}] n={a['n']} (loss {a['n_loss']}) win {100*a['win']:.1f}%  "
-          f"EV {a['mean_ev']:+.4f} CI[{a['ci'][0]:+.4f},{a['ci'][1]:+.4f}]  resid {a['resid']:+.3f}")
-    print(f"      Sharpe {a['sharpe']:+.3f} (skew {a['skew']:+.2f})  PSR(>0) {a['psr0']:.3f}  "
-          f"DSR@N={a['n_trials']} {a['dsr']:.3f}  (E[maxSR null] {a['sr0']:.3f})")
-    print(f"      Wilson-LB(win) {a['wlb']:.3f} vs breakeven {a['be']:.3f}   "
-          f"=> {'SURVIVES' if a['SURVIVES'] else 'FAILS'} (DSR>=.95 & CI>0 & WLB>be & n>=30)")
+    print(f"  [{a['label']}] n={a['n']} (loss {a['n_loss']})  win {100*a['win']:.1f}%  "
+          f"mean net-EV {a['mean_ev']:+.4f}  cluster-CI[{a['ci'][0]:+.4f},{a['ci'][1]:+.4f}]  resid {a['resid']:+.3f}")
+    fb = "  [DSR under-deflated: sampling-var fallback]" if a.get("dsr_fallback") else ""
+    print(f"      PRIMARY: deflated cluster-bootstrap p (vs N={a['n_trials']}) = {a['p_deflated']:.3f}  "
+          f"(raw one-sided p={a['p_single']:.3f})")
+    print(f"      [presentation] Sharpe {a['sharpe']:+.3f} skew {a['skew']:+.2f}  PSR(>0) {a['psr0']:.3f}  "
+          f"DSR {a['dsr']:.3f}{fb}  Wilson-LB(win) {a['wlb']:.3f} vs breakeven {a['be']:.3f}")
+    print(f"      => {a['verdict']}   (gate: deflated p<0.05 AND cluster-CI>0 AND n_loss>={MIN_LOSS})")
 
 
 # ----------------------------------------------------------------- trials ledger

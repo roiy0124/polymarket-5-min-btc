@@ -14,18 +14,11 @@ from analysis import stats as S
 from experiment_favorite_tail import load as ft_load
 
 
-def report(label, asks, wons, wsids):
-    asks = np.asarray(asks, float); wons = np.asarray(wons, float); wsids = np.asarray(wsids)
-    print(f"\n--- {label}  (n={len(asks)}) ---")
-    r = S.binary_bet_returns(asks, wons)
-    ev, lo, hi = S.cluster_bootstrap_ci(r, wsids)
-    print(f"  win {100*wons.mean():.1f}%  mean EV/$1 {ev:+.4f}  cluster-CI[{lo:+.4f},{hi:+.4f}]  "
-          f"Sharpe {S.sharpe(r):+.3f}  skew {float(__import__('scipy.stats',fromlist=['skew']).skew(r)):+.2f}  "
-          f"PSR(>0) {S.psr(r):.3f}")
-    print(f"  DSR by honest trial count N:  " +
-          "   ".join(f"N={N}:{S.deflated_sharpe(r, N)['dsr']:.3f}" for N in (1, 10, 30, 100)))
-    k = int(wons.sum())
-    print(f"  Wilson-LB(win) {S.wilson_lb(k, len(wons)):.3f} vs breakeven {0.0 if len(asks)==0 else __import__('net_ev').breakeven_winrate(asks.mean()):.3f}")
+def report(label, asks, wons, wsids, n_trials=S.N_PROGRAM):
+    """Run the REAL gate (assess) with a derived/committed N -- no DSR slider."""
+    a = S.assess(asks, wons, wsids, n_trials=n_trials, label=label)
+    S.print_assess(a)
+    return a
 
 
 def audit_favorite_tail():
