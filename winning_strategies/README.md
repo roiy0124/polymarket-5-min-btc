@@ -45,3 +45,4 @@ NOT a smarter threshold; out-selecting a calibrated market is already priced).
 | Favorite-tail taker, hold-to-resolution | **2 — proven baseline** | causal ✅, EV breakeven (pooled +0.005/$1, CI incl 0) | `experiment_favorite_tail.py` |
 | B risk-filter (skip BTC-opposing favorites) | 3 — pre-registered | real direction (perm p=0.002), not yet deployable | `validate_b_riskfilter.py` (LOCKED) |
 | Spot cross-asset lead-lag (SMT) | 3 — pre-registered | Stage-1 real+stable (all 5 alts, 5.5yr, 100% sign-stable); Stage-2 EV unproven | `spot-leadlag.md` · `analysis/spot_leadlag.py` |
+| Spike-gated fade (idiosyncratic-spike noise filter on the fade) | 3 — pre-registered | resid +0.115, all-4-coin positive — but n=18 (~1σ, not significant); needs OOS | `experiment_spike_fade.py` (LOCKED) |
