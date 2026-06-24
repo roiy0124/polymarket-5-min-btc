@@ -64,5 +64,27 @@ viable. **How to check: `python ideas_old/experiment_token_fear.py --follow`** a
    that killed favtail-adaptive / config_tod OOS).
 
 This is logged in memory `reversion-fear-dip-idea` and the forward backlog `IDEAS.md` so it resurfaces.
+
+## Diagnostics (2026-06-24, `--diag`) — case CLOSED pending OOS
+Ran periodicity + visual sanity of the decided actions (`python ideas_old/experiment_token_fear.py --follow --diag`
+→ plots in `spot_leadlag/tokenfear_*.png`, regenerable):
+- **Periodicity = UNANSWERABLE on current data.** The alt *token* DB is only **~2 calendar days** (562 windows ≈
+  1.9d; day-of-week buckets show only Mon/Tue/Wed). Each UTC-hour bucket ≈ 2 samples, so the eye-catching
+  positive block at **UTC 2–6** is thin-calendar NOISE — the config_tod trap. Corollary: the headline **n≈508 is
+  ~2 days of cross-correlated obs, NOT 508 independent ones** (same caveat as the B-filter's "~25h = one stretch").
+  → the periodicity question needs **WEEKS of calendar coverage**, re-check it together with the EV bar.
+- **Visual sanity = logic is REASONABLE, experiment not broken.** Example decided actions show the alt UP-token
+  declining into the decision and mostly resolving Down (follow-won) — the gate is catching real, informed token
+  dumps. The "peers stay flat" leg is noisy at the token level (consistent with a real-but-weak signal).
+- **Regression flag (the decider).** As data grew (n 497→508) the follow net EV fell **+0.0195 → +0.0027** and
+  residual **+0.055 → +0.046**. The signal is *weakening* with more data → leans toward regressing-to-dead; the
+  pre-registered OOS re-test will settle it.
+
+**Sharpened revisit trigger:** the binding constraint is **calendar coverage**, not fired-count. Re-check after
+**≥2–4 weeks more alt-token calendar data** (aligns with the b-riskfilter timeline): re-run `--follow --diag` and
+require (a) net EV>0 with Wilson-LB(win)>breakeven AND placebo p<0.05 (it must STOP regressing), AND (b) if a
+periodic window is claimed, it must be a coherent block that holds across many calendar days, not ~2. Prior after
+these diagnostics: **likely dead** (regressing, fee-capped) — but kept here because the mechanism is sound and the
+economics (fee/spread) could still flip it. Not deployed; nothing armed.
 Related: memory `reversion-fear-dip-idea`, `market-efficient-no-knowledge-edge`. The earlier token-**vs-spot**
 variant (SMT-panic-fade) was killed first — see `reversion-fear-dip-idea`.

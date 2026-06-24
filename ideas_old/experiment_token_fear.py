@@ -116,6 +116,86 @@ def ev_stats(rows):
                 wlb=wilson_lb(k, n), be=breakeven_winrate(mean_ask), resid=k / n - mean_mid)
 
 
+# ----------------------------------------------------------------- diagnostics
+def full_path(coin, ws, col="up_mid"):
+    """Full intra-window snapshot path [(time_left, value)] for coin's window ws."""
+    for db in coins.all_dbs(coin):
+        try:
+            conn = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+        except sqlite3.Error:
+            continue
+        try:
+            rows = conn.execute(
+                "SELECT time_left, %s FROM snapshots WHERE window_start=? AND %s IS NOT NULL "
+                "ORDER BY time_left DESC" % (col, col), (ws,)).fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+        conn.close()
+        if rows:
+            return rows
+    return []
+
+
+def diag(fired, side, out):
+    """(1) PERIODICITY: net EV / win / resid by UTC hour + day-of-week (does the fee-capped
+    signal concentrate in a tradable window?). (2) VISUAL: example decided-action token paths
+    (alt vs BTC/ETH tokens) so we can eyeball whether the gate logic is reasonable."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from datetime import datetime, timezone
+    DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    byh, byd = {}, {}
+    for r in fired:
+        d = datetime.fromtimestamp(r[1], timezone.utc)
+        byh.setdefault(d.hour, []).append(r); byd.setdefault(d.weekday(), []).append(r)
+
+    print("\n  PERIODICITY (UTC hour) — overfit caveat: 24 buckets, a lone 'good hour' is noise")
+    print(f"  {'h':>3} {'n':>4} {'win%':>6} {'EV/$1':>8} {'resid':>7}")
+    for h in range(24):
+        rs = byh.get(h)
+        if rs and len(rs) >= 4:
+            s = ev_stats(rs)
+            print(f"  {h:>3} {s['n']:>4} {100*s['win']:>5.1f}% {s['ev']:>+8.3f} {s['resid']:>+7.3f}")
+
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(15, 5), dpi=120)
+    hs = [h for h in range(24) if byh.get(h) and len(byh[h]) >= 4]
+    a1.bar(hs, [ev_stats(byh[h])["ev"] for h in hs], color="#1f77b4")
+    for h in hs:
+        a1.annotate(str(len(byh[h])), (h, ev_stats(byh[h])["ev"]), ha="center", fontsize=7)
+    a1.axhline(0, color="k", lw=0.8); a1.set_xlabel("UTC hour"); a1.set_ylabel("net EV/$1")
+    a1.set_title(f"{side}: net EV by UTC hour (n annotated)")
+    ds = [d for d in range(7) if byd.get(d) and len(byd[d]) >= 4]
+    a2.bar([DOW[d] for d in ds], [ev_stats(byd[d])["ev"] for d in ds], color="#2ca02c")
+    for i, d in enumerate(ds):
+        a2.annotate(str(len(byd[d])), (i, ev_stats(byd[d])["ev"]), ha="center", fontsize=7)
+    a2.axhline(0, color="k", lw=0.8); a2.set_ylabel("net EV/$1"); a2.set_title(f"{side}: net EV by day-of-week")
+    p1 = os.path.join(out, "tokenfear_periodicity.png")
+    fig.tight_layout(); fig.savefig(p1); plt.close(fig)
+    print(f"  periodicity plot -> {p1}")
+
+    # VISUAL sanity: 6 fired events, alt vs BTC/ETH token paths, decision marked
+    sample = fired[:: max(1, len(fired) // 6)][:6]
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9), dpi=120)
+    for ax, (coin, ws, tau, mid, ask, won) in zip(axes.flat, sample):
+        for c, col, lw in [(coin, "#d62728", 2.0), ("btc", "#ff7f0e", 1.0), ("eth", "#1f77b4", 1.0)]:
+            pth = full_path(c, ws)
+            if pth:
+                ax.plot([300 - tl for tl, _ in pth], [v for _, v in pth],
+                        color=col, lw=lw, label=f"{c.upper()} UP")
+        ax.axvline(300 - tau, color="k", ls="--", lw=0.8)
+        # follow won iff outcome Down; row 'won' already encodes the chosen side's win
+        ax.set_title(f"{coin.upper()} @t0+{300-tau}s  entry {ask:.2f}  "
+                     f"{'WON' if won else 'LOST'} ({side.split()[0]})", fontsize=9)
+        ax.set_xlabel("s into window"); ax.set_ylabel("token up_mid"); ax.legend(fontsize=7); ax.grid(alpha=0.25)
+    fig.suptitle(f"Decided actions — {side}: does the alt UP token dump while BTC/ETH UP tokens hold? "
+                 "(dashed = decision)", fontsize=11)
+    p2 = os.path.join(out, "tokenfear_examples.png")
+    fig.tight_layout(); fig.savefig(p2); plt.close(fig)
+    print(f"  example-paths plot -> {p2}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--follow", action="store_true", help="BUY Down (follow the informed dump); default = fade (buy Up)")
@@ -124,6 +204,7 @@ def main():
     ap.add_argument("--gap", type=float, default=0.05)
     ap.add_argument("--band", default="0.20,0.85", help="entry up_mid band (the gate is on the UP token)")
     ap.add_argument("--boot", type=int, default=4000)
+    ap.add_argument("--diag", action="store_true", help="periodicity (hour/DOW) + example decided-action token paths")
     args = ap.parse_args()
     band = tuple(float(x) for x in args.band.split(","))
     cl = list(coins.ENABLED)
@@ -168,6 +249,11 @@ def main():
                   f"resid {sc['resid']:>+6.3f} (wlb-be {sc['wlb']-sc['be']:>+.3f})")
     print("\n  READ: tradable iff fired EV>0 AND beats placebo (p<0.05) AND replicates per-coin")
     print("  AND Wilson-LB(win)>breakeven, net of the (Down-side) ask + taker fee. In-sample => needs OOS.")
+
+    if args.diag:
+        out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "spot_leadlag")
+        os.makedirs(out, exist_ok=True)
+        diag(fired, side, out)
 
 
 if __name__ == "__main__":
