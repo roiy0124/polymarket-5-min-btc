@@ -41,15 +41,28 @@ The mechanism the user intuited is **real** — an un-proportionate token dump i
 it's just **too small to clear the spread + fee** today. That's a different failure than "never real," so it's
 archived here rather than in `dead_ends/`.
 
-## Revisit if
-- **Fees drop or spreads tighten** on the 5-min market (the residual is +0.055; today's ~3.5% fee + ~2¢ Down
-  spread is what kills it — a materially cheaper venue could flip it positive).
-- **A larger-residual subset survives OOS** — more-extreme dumps *might* carry a bigger residual that clears the
-  fee. ⚠️ This is threshold-mining (the trap that killed favtail-adaptive / config_tod OOS) — only pursue with
-  a *single pre-specified* threshold tested on *fresh* data, never an in-sample sweep.
-- As a **weak Tier-3 pre-registration candidate**: lock the current gate (drop 5¢ / gap 5¢ / peer-tol 2¢,
-  follow/buy-Down) and re-check on ≥2–4 weeks more data; promote only if it then clears placebo + Wilson.
+## REVISIT TRIGGER — quantified, so future-you can actually decide (don't just file it away)
 
-Run: `python ideas_old/experiment_token_fear.py --follow` (or omit `--follow` for the dead fade).
+The signal is **real** (all-6-coin residual +0.055). It fails on TWO separable things; either flipping makes it
+viable. **How to check: `python ideas_old/experiment_token_fear.py --follow`** and read its output against:
+
+1. **STATISTICAL POWER (data-growth trigger).** Today: n=497 fired, win 59.8%, **Wilson-LB(win) 0.554 < breakeven
+   0.575** (gap 0.021); placebo p=0.186. If the win-rate HOLDS ≈0.598, the Wilson-LB rises with n and crosses
+   breakeven at roughly **n ≈ 1800 fired events (~3–4× today ≈ a few more months of the running collector)**.
+   → **Re-run when n_fired ≳ 1800; VIABLE iff Wilson-LB(win) > breakeven AND placebo p < 0.05.** (It may instead
+   REGRESS — then it's confirmed dead. That's the honest pre-registered test.) Gate params are LOCKED:
+   drop 5¢ / gap 5¢ / peer-tol 2¢, band 0.20–0.85, buy-Down, hold-to-0/1. Do NOT re-tune them (overfit trap).
+
+2. **ECONOMICS (fee/spread trigger).** Gross-of-fee the edge is **≈ +0.05/$1**; the ~3.5% taker fee (≈0.031/$1 at
+   the 0.56 Down ask) + the ~2¢ Down spread are what sink it to +0.0195 net. → **Re-test immediately if any of:**
+   the 5-min market's effective taker fee drops materially (e.g. a fee cut or a working **maker-Down entry** that
+   skips the taker fee — gross-of-fee it clears with margin); Down-side spreads tighten (more market volume);
+   or a cheaper venue appears. A ~halving of the effective fee likely flips it positive on the point estimate.
+
+3. **(Caution) larger-residual subset.** More-extreme dumps *might* carry a bigger residual that clears the fee —
+   but only test a *single pre-specified* tighter threshold on *fresh* data, never an in-sample sweep (the trap
+   that killed favtail-adaptive / config_tod OOS).
+
+This is logged in memory `reversion-fear-dip-idea` and the forward backlog `IDEAS.md` so it resurfaces.
 Related: memory `reversion-fear-dip-idea`, `market-efficient-no-knowledge-edge`. The earlier token-**vs-spot**
 variant (SMT-panic-fade) was killed first — see `reversion-fear-dip-idea`.

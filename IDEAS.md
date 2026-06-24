@@ -43,6 +43,9 @@ idea B. (Strategy-survey deep research in flight: run `wf_28066528-bb1` → will
 - **E. Maker-rebate harvesting at the tails** — 🔴 ruled out standalone; keep rebate as a capped +term in net_ev. Re-verify live rebateRate=0.20 (per-fee vs per-notional) before encoding.
 - **F. Multi-coin as a measurement multiplier (meta)** — 🟢 ADOPT, but power OVERSTATED: ~1.5 effective coins for market-wide edges (not 2–3×); ~6× only for idiosyncratic edges (B) → F pairs best with B.
 
+## Revisit watchlist (parked in `ideas_old/` — re-check when the trigger fires, don't forget)
+- **Fear stock-sell (token-vs-token), the FOLLOW flip** — 🟡 PARKED, real-but-fee-capped. FADE (buy Up) is dead (the un-proportionate token dump is *informed*, not fear); FOLLOW (buy Down) has a REAL all-6-coin residual **+0.055** but nets only +0.0195 (placebo p=0.19, Wilson-LB<breakeven) — the ~3.5% fee + ~2¢ Down spread eat it. **TRIGGER → re-run `python ideas_old/experiment_token_fear.py --follow` when:** (1) `n_fired ≳ 1800` (~a few more months of the running collector — the Wilson-LB crosses breakeven there *if* win-rate holds), OR (2) the 5-min taker fee drops / a fee-free maker-Down entry works / Down spreads tighten (gross-of-fee the edge is ~+0.05/$1). **Viable iff Wilson-LB(win)>breakeven AND placebo p<0.05.** Params LOCKED (drop5¢/gap5¢/peer-tol2¢, buy-Down) — no re-tune (overfit trap). Full writeup: `ideas_old/fear-stock-sell.md`.
+
 ## D. Settlement-basis edge (Chainlink vs Binance/Pyth)
 
 **Status:** discussing (2026-06-23). Discussion/design only; tests deferred until more data.
