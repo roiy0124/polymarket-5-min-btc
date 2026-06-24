@@ -19,8 +19,12 @@ Entry = up_ask (fade) or down_ask (follow); outcome = Up / Down. EV via net_ev (
     python experiment_token_fear.py --follow       # buy Down (follow the informed dump)
 """
 import argparse
+import os
 import random
 import sqlite3
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root (archived in ideas_old/)
 
 import coins
 from net_ev import net_ev_per_dollar, breakeven_winrate, wilson_lb
