@@ -70,7 +70,7 @@ def build_basket(data, lk, tl, band=(0.20, 0.85)):
             if ws not in data[c]:
                 continue
             ua, da, um, won = data[c][ws]
-            if not (band[0] <= um <= band[1]):
+            if um is None or not (band[0] <= um <= band[1]):
                 continue
             z = z_at(lk, c, ws + (300 - tl))          # idiosyncratic spot z at the decision second
             if z is not None:
