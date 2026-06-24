@@ -82,6 +82,40 @@ def fetch_market(window_start, coin="btc", timeout=DEFAULT_TIMEOUT):
     }
 
 
+def fetch_fee_schedule(window_start=None, coin="btc", timeout=DEFAULT_TIMEOUT):
+    """Verify the LIVE taker-fee schedule from Gamma (it lives on the market, field `feeSchedule`).
+    Confirmed 2026-06-25: {rate:0.07, takerOnly:True, rebateRate:0.2, exponent:1}, feesEnabled=True,
+    feeType='crypto_fees_v2'. Closes the 'fee hardcoded, never fetched' gap. window_start defaults to
+    the current live 5-min window. Returns a dict or None."""
+    if window_start is None:
+        import time
+        window_start = int(time.time() // 300 * 300)
+    url = f"{GAMMA_EVENTS}?slug={urllib.parse.quote(slug_for(window_start, coin))}"
+    data = _get_json(url, timeout=timeout)
+    if not data:
+        return None
+    event = data[0] if isinstance(data, list) else data
+    markets = event.get("markets") or []
+    if not markets:
+        return None
+    m = markets[0]
+    sched = m.get("feeSchedule") or {}
+    if isinstance(sched, str):
+        try:
+            sched = json.loads(sched)
+        except (ValueError, TypeError):
+            sched = {}
+    return {
+        "slug": m.get("slug"),
+        "feesEnabled": bool(m.get("feesEnabled")),
+        "feeType": m.get("feeType"),
+        "rate": sched.get("rate"),
+        "takerOnly": sched.get("takerOnly"),
+        "rebateRate": sched.get("rebateRate"),
+        "exponent": sched.get("exponent"),
+    }
+
+
 def resolution_from_market(market):
     """Given a fetched market dict, return 'Up' / 'Down' / None once settled."""
     if not market or not market.get("closed"):
