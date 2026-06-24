@@ -12,6 +12,11 @@ STOP
 exit_maps/
 matrix/
 gathered/
+data/spot/
+spot_leadlag/
+*.zip
+*.npz
+*.parquet
 round_charts/*.png
 round_charts/**/*.png
 signals.json

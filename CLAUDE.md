@@ -137,6 +137,8 @@ adapter is a clean future drop-in.
 | `chart_capture.py` | Per-round price charts, **`--coin`** → `round_charts/<coin>/`. Coin-correct titles/labels + per-coin line color; price axis scales to the coin (low-priced coins not flat). Supervisor child (live) / `--once` (backfill). **Backfill merges live + archives (`coins.all_dbs`)** so an archived coin charts its full history; renders **hi-res (170 dpi)**. |
 | `analyze_all.py` | Run exit maps + round charts for many coins at once (per coin) **+ the cross-coin gathered montages** at the end. |
 | `make_gathered.py` | **Cross-coin montages**: tiles the SAME graph across all coins side by side → `gathered/exit_maps/<up\|down\|*_margin>/entry_NNc.png` and `gathered/round_charts/<round>.png`. Auto-run by menu 5/6 + analyze_all; menu `m` rebuilds. **HI-RES (2026-06-23):** source charts render at 140–170 dpi and the montage at 200 dpi with source-preserving tiles (~1120px/tile vs the old ~324px mesh) so you can ZOOM into cross-coin detail; `--dpi N` trades crispness vs file size. |
+| `analysis/spot_data.py` | **Persistent FREE spot-history store** (NOT Polymarket): Binance public 1s klines, all 6 coins back to 2021-01, in `data/spot/<SYMBOL>/` (gitignored .zip + fast .npz cache). `load_range(sym,start)`; CLI `python -m analysis.spot_data --coins all --start 2021-01`. This is the **deep Stage-1 data** (years, vs our ~weeks of token quotes) — see memory `spot-history-two-stage-validation`. |
+| `analysis/spot_leadlag.py` | **Stage-1 signal-existence harness** (spot-only, no Polymarket): does BTC's causal trailing-Hs move predict an alt's 5-min UP outcome; rolling sign-stability + dual-label + `--alts all` cross-coin. Outputs `spot_leadlag/`. Confirms/kills a signal's EXISTENCE deep; does NOT test EV (that's Stage-2, needs live quotes). |
 
 ### Data model (per coin: `data/<coin>/live.db`, SQLite — gitignored; one DB per coin, identical schema)
 
@@ -218,6 +220,21 @@ in-sample dry-run) after ~2–4 weeks more data. `net_ev.py` = the fee-aware EV 
 needed — just keep the running supervisor (don't start a 2nd = dup rows). **Proven-dead experiments are
 archived in `dead_ends/`** (see its README); the dead executors (`phase2*.py`, `paper_trade.py`) stay in
 root for `menu.py`, with `phase2_nested.py` bridging to the archived shared libs.
+
+**UPDATE 2026-06-24 (TWO-STAGE validation + deep spot history — see `winning_strategies/` + memory
+`spot-history-two-stage-validation`):** The cross-asset SMT signal is split into **Stage 1 = does it EXIST/is it
+STABLE** (testable on deep free spot, years back) vs **Stage 2 = does it BEAT THE QUOTE+FEE** (only testable on
+our live token data — the 5-min product launched 2026-02-12, so price history is hard-capped; spot can't recover
+the ask). Built `analysis/spot_data.py` (free Binance 1s store, all 6 coins to 2021-01 in `data/spot/`, 23GB
+gitignored) + `analysis/spot_leadlag.py`. **Stage-1 RESULT: PASS, emphatically** — BTC's causal 15s move predicts
+every alt's 5-min UP with r≈+0.11–0.13, **100% sign-stable across the full 5.5 years (every regime, 575k
+windows/coin) AND across 35 (coin×framing) robustness cells**; sign is POSITIVE (co-move, not the academic
+seesaw's hourly-negative). Kills the non-stationarity worry. **BUT this is signal-existence = the UPPER BOUND, NOT
+EV**: the alt quote prices most of it (alt-own move, the strongest predictor, is mechanical/already in the ask),
+so Stage-2 (does BTC's lead add value *beyond* the priced favorite) still needs live data = exactly the
+pre-registered **B risk-filter** (`validate_b_riskfilter.py`, LOCKED). New **`winning_strategies/`** folder = the
+honest tiered roster (Tier 1 deployable-winner = empty; Tier 2 = favorite-tail proven-causal-breakeven; Tier 3 =
+B risk-filter + spot lead-lag, pre-registered). `live_runner` stays GATED.
 
 Future drop-ins (when asked): a **Chainlink** price adapter in `feeds.py` to match
 resolution exactly; verified alt-specific tooling.
