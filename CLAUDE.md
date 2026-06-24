@@ -245,5 +245,19 @@ Wilson-LB(win)>breakeven AND placebo p<0.05 (params LOCKED, no re-tune). See `ID
 `ideas_old/fear-stock-sell.md`. New folders this session: `winning_strategies/` (roster), `shared_tools/`
 (reusable primitives index), `ideas_old/` (parked ideas), plus `analysis/spot_data.py` + `analysis/cross_asset_factor.py`.
 
+**UPDATE 2026-06-25 (RIGOR PASS — program WALLED; see `POSTMORTEM.md` + memory `program-walled-verdict`):** Built
+the missing rigor module **`analysis/stats.py`** (deflated cluster-bootstrap residual test = the right object for a
+binary market; Neff-aware for the +0.61 cross-coin outcome corr; n_loss-gated; multiplicity-deflated) + an
+independent second-mind critique that CORRECTED it (the first gate was dead code / a DSR slider). Re-ran every
+candidate through the honest gate: **favorite-tail is NET-NEGATIVE not breakeven** (pooled −0.0029, deflated p=1.0,
+4/6 coins negative — see `analysis/audit_candidates.py`); residual basket FAILS (−0.092, pays 2 taker fees);
+both reversion variants FAIL (peer-surge flipped to −0.16); spike-fade INSUFFICIENT (n=18); b-filter dying;
+lead-lag priced. The borderline "pulses" were best-of-N noise that regressed negative as data grew. Fee VERIFIED
+live (`feeds.fetch_fee_schedule`: 0.07 correct; `net_ev` 0.07·(1−p)/stake correct). **VERDICT: no demonstrable
+retail edge — efficient-on-knowledge (Grossman-Stiglitz), fee-taxed where the edge would be, −100%-skewed; the
+only untested corner (maker-in-noise) is rebate-capped ~0.4% + adverse-selected, needs live fills.** STOP running
+directional/gating/favorite-tail variants. The durable asset is `analysis/stats.py` — gate EVERY future idea
+through `stats.assess`. Only revisit if fees drop materially or after months more data (re-gate on ≥30-50 losers).
+
 Future drop-ins (when asked): a **Chainlink** price adapter in `feeds.py` to match
 resolution exactly; verified alt-specific tooling.
