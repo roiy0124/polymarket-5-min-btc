@@ -113,6 +113,16 @@ push-button re-test; `--all` = in-sample dry-run). All **proven-dead experiments
 (walkforward/combined/config_tod/lookback_sweep/trend_outcome/lookahead_taker/xasset_smt/
 favtail_selectivity/favtail_adaptive) — see `dead_ends/README.md`.
 
+### Reversion / fear-dip + idiosyncratic-spike (2026-06-24, ACTIVE — see memory reversion-fear-dip-idea, idiosyncratic-spike-idea)
+Contrarian short-term reversal (SMT-gated): buy a laggard alt's Up token when underpriced, hold to 0/1.
+`experiment_fear_dip.py` (dip-bottom: DEAD, resid −0.04, the discount is justified), `experiment_fear_dip_variants.py`
+(PEER-SURGE / AFTER-RECOVERY: residual flips POSITIVE +0.01..+0.03, peer-surge ~breakeven+ EV — BORDERLINE:
+placebo p=0.09-0.14, per-coin mixed eth/sol+ xrp−, Wilson<be; not over the bar), `experiment_hybrid.py`
+(favorite-tail + fear-dip; the +0.89 "recovered" subset is SURVIVORSHIP). `experiment_idio_spikes.py`
+(lone idiosyncratic small-cap spot spikes: asymmetry confirmed btc 0/eth 1 vs sol 16/doge 7; immediate-revert
+rare at 1/s). Reversion = real pulse not deployable; spike = the noise-filter for it, parked. NAIVE adaptive
+params (30-min refit best combo) = the documented overfit trap (favtail-adaptive + config_tod died OOS).
+
 ---
 
 ## The core problem (why everything is hard)
