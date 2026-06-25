@@ -19,8 +19,10 @@ PSR / Wilson are the *same* test — they're shown as presentation, not stacked 
 | candidate | n | losers | mean net-EV/$1 | deflated p | verdict |
 |---|---:|---:|---:|---:|---|
 | **Favorite-tail** (the base) | 1849 | 36 | **−0.0029** | 1.00 | **FAILS** (was "breakeven"; 4/6 coins negative) |
-| **B risk-filter** | — | 8 | negative (fwd) | — | dying → ~dead (gates a negative base) |
-| **Spike-gated fade** | 18 | 6 | +0.17 | — | INSUFFICIENT (no null at n<20) |
+| **B risk-filter** | 449 (fwd) | 9 | **−0.0019** | 1.00 | **FAILS / FALSIFIED** (see below — own-momentum confound) |
+| **Token-fear FOLLOW** | 599 | 243 | **+0.0236** | 1.00 | **FAILS net** (cluster-CI [−0.074,+0.122]; signal real at MID, fee-capped — below) |
+| **Maker-in-noise** | 2254 | 1561 | **−0.365** | — | **FAILS / DEAD** (adverse selection; was wrongly "0 fills" — below) |
+| **Spike-gated fade** | 18 | 6 | +0.17 | 1.00 | **DEAD** (no dose-response + falling-knife fail — below) |
 | **Residual basket** (market-neutral) | 34 | — | **−0.092** | 1.00 | **FAILS** (pays 2 taker fees) |
 | **Reversion: after-recovery** | 262 | 121 | **−0.0041** | 1.00 | **FAILS** (was "+0.011 borderline") |
 | **Reversion: peer-surge** | 254 | 167 | **−0.16** | 1.00 | **FAILS** (win-rate flipped 41.6%→34.3%) |
@@ -28,6 +30,47 @@ PSR / Wilson are the *same* test — they're shown as presentation, not stacked 
 
 The borderline "pulses" (b-filter p=0.002, peer-surge +0.034, spike-fade 12/18) all **regressed to
 negative or insufficient as data accrued** — the textbook deflated-Sharpe null asserting itself.
+
+### 1b. Re-experiment of every still-open idea (2026-06-25, second-mind reviewed)
+
+On the user's instruction, every idea NOT yet *proven* dead was re-run on the now-larger dataset
+(alts ~640 windows each, BTC ~1397), routed through `analysis/stats.assess` (`analysis/gate_open_ideas.py`),
+and adversarially reviewed by an independent second-mind agent. All four resolved to DEAD or fee-capped:
+
+- **Maker-in-noise — the prior "0 modeled fills / empty cell" was a GATE BUG, not an empty cell.** The
+  toxicity gate measured pre-entry FLOW over `[entry−60s, entry]`, but entry fires at the first mid-band
+  moment (`time_left≥60` == window OPEN, median entry tl=300), so the 60s prior is the *previous* window
+  when the token barely traded → `flow_imbalance` returned `None` for ~100% (3/3716) → every candidate was
+  dropped before the fill model ran. Removing the structurally-unavailable flow gate, the cell **populates**
+  (2254 fills) and is decisively negative: **win 30.8% at mean fill 0.487 → −0.365/$1** even with rebate and
+  no taker fee. This is *mechanical* adverse selection (a resting BUY fills precisely when SELL flow pushes
+  the token toward 0 — fill and loss are the same event). The fill model is itself **optimistic**
+  (`queue_ahead==0` for 99.8% of open-entries → assumes front-of-empty-queue instant fill), so −0.365 is an
+  **upper bound**; live fills can only be worse. The one causal toxicity proxy *with* data (top-5 book depth
+  imbalance) lifts it merely to −0.285 at strong bid support — nowhere near the ~0.485 breakeven. The fee-free
+  corner is **DEAD**; the postmortem's *conclusion* (corner unviable) survives — only its *reason* was wrong.
+- **B risk-filter — cross-asset story FALSIFIED, not merely "wait for data."** Forward gated EV is still
+  negative (−0.0019). The decisive new test (now CHECK 5 in `validate_b_riskfilter.py`): replace BTC's last-15s
+  move with the **alt's OWN** last-15s move as the gate. Own-momentum gates **strictly better** (+0.0091 vs
+  B's +0.0052 in-sample; +0.0027 vs −0.0019 forward), and the "pure cross-asset" component (BTC net of own) is
+  the **worst** of the three. In the subset where B uniquely keeps (own-momentum says skip), B keeps **losers**
+  (−0.038). So B is a generic favorite-MOMENTUM filter (~77% sign-overlap with own-momentum) on a fee-negative
+  base, not a BTC lead. The forward placebo p=0.035 dies at any honest N (Sidak N≥3 → >0.099) and the
+  window-clustered one-sided p is 0.57. **DEAD** — stop the pre-registration clock.
+- **Token-fear FOLLOW — signal is REAL at the mid, killed by spread+fee (record as fee-capped, not "no
+  signal").** Decomposition on the n=599 fired set: gross residual (won − down_**mid**) = **+0.052, cluster-CI
+  [+0.009,+0.095], p=0.008**, positive in all 6 coins; minus the half-spread → +0.037 (p≈0.05); minus the
+  3.1pp taker fee → +0.024, cluster-CI [−0.074,+0.122], p=0.32 → gone. So the informed-dump Down edge exists
+  but the **taker** cost eats it. The only specification that could legitimately flip it is a **fee-free
+  maker-Down entry** (the gross-mid edge clears breakeven). Revisit at n_fired ≳ 1800 OR via maker-Down;
+  params LOCKED, no re-tune.
+- **Spike-gated fade — DEAD on the current thesis.** The +0.17 at z<−3 (n=18) has **no dose-response**:
+  loosening z→2.5→2.0 turns resid **negative** in both drop columns (a real over-reaction effect would stay
+  positive as more noise spikes are admitted). It also fails a falling-knife check (spike-dumps resolve Down
+  33% vs 51% baseline = these 18 just happened to win). Binding constraint is intrinsic event-scarcity (z<−3
+  is a ~0.1% tail → ~18 events across the whole archive); sub-second `price_ticks` sharpen *detection* but
+  cannot add token windows. At most WAIT-FOR-DATA with a pre-committed kill (n_loss≥30 AND monotone resid).
+- **Idiosyncratic-spike** — descriptive only; its sole consumer (spike-fade) is dead, so it has no live role.
 
 ## 2. Why — the walls, reframed against theory
 
@@ -52,11 +95,14 @@ engine exists (`analysis/backtest.py`) and `book_events` carries the depth. So w
 (`experiment_maker_noise.py`: rest a maker bid in p∈[0.35,0.65] low-toxicity windows, model the fill from
 the real book + SELL prints, hold to 0/1, credit the rebate, no taker fee) and ran it through the gate.
 
-**Result: 0 modeled fills.** On our data the cell is essentially **empty** — mid-band moments with enough
-book depth *and* qualifying sell-flow *and* a low-toxicity reading are vanishingly rare (the token is
-decisive most of the window; `book_events` 3-day retention thins it further). So even the one un-mined
-corner cannot be populated here. Its income ceiling is the ~0.4% rebate, it must still beat the
-adverse-selection the passive branch lost to, and settling it needs **live liquidity provision**. Prior: low.
+**Result (CORRECTED 2026-06-25): the cell is NOT empty — it is DEAD by adverse selection.** The original
+run reported "0 modeled fills," but that was a **gate bug** (§1b): the toxicity gate measured pre-entry flow
+at window-open, where it is structurally `None`, so it dropped every candidate. With the broken gate removed
+the cell populates (**2254 fills**) and prints **−0.365/$1** even fee-free + rebate (win 30.8% at fill 0.487)
+— mechanical adverse selection, with the fill model itself optimistic (front-of-empty-queue), so that is an
+upper bound. No causal toxicity proxy with data (book depth imbalance → −0.285 at best) rescues it. The
+income ceiling is the ~0.4% rebate vs a ~15.7pp win deficit. **Verdict upgraded from "could not settle /
+prior low" to settled DEAD on modeled data; live fills could only be worse.**
 
 ## 4. The methodology that's wrong everywhere else, and what we fixed
 

@@ -39,6 +39,15 @@ Pooled = breakeven (CI includes 0). Per-coin "significant" cells are loss=0 zero
 4. **Thin depth** at 0.95–0.97; filling size walks the book.
 5. **No cross-coin replication** of significance on the ~22h alt sample.
 
+## Adaptivity / drift (2026-06-25, second-mind reviewed)
+Favorite-tail has **no drift-fragile param to self-normalize**: `ask ≥ 0.95` is a probability level and
+`tl = 30s` is a clock position — both regime-invariant (the over-round gate above is where the
+self-normalizing lives). A by-thirds look showed losers rising 9→11→18, but that is **not statistically
+significant** (trend p≈0.07) and tracks a higher-volatility recent regime (dist-to-strike 7.5→8.7→11.0 bp),
+not edge erosion — so no reaction is warranted. Monitor the live edge with `analysis/adaptive.rolling_wilson_monitor`
+(rolling Wilson-LB(win) − breakeven); alert only if it crosses below 0 and stays there. Do NOT re-fit the
+ask/tl thresholds to recent data — that adaptive path (`experiment_favtail_adaptive`) already died OOS.
+
 ## Path to Tier 1 (how this graduates to a deployable winner)
 Stack a **forward-underpricing** signal that the calibrated quote hasn't yet absorbed — both candidates are in
 Tier 3 of this folder, awaiting fresh-data proof:

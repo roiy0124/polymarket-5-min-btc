@@ -21,6 +21,43 @@ WebSocket client and WS is materially more reliable/complete than REST polling f
 this use case. Do not add further pip packages without asking. (Analysis tooling
 using pandas is fine as a *separate* opt-in script.)
 
+## Default working method for ANY strategy / idea / signal work (do this AUTOMATICALLY — no need to ask)
+
+Whenever the user raises a trading idea, signal, factor, or asks to evaluate/improve a strategy in this
+repo, apply ALL of the following BY DEFAULT, without being prompted each time. This is standing policy.
+
+1. **Wear the quant + data-analyst hat.** Invoke the `trading-strategy-knowledge` skill's lens (market
+   microstructure, factor thinking, López-de-Prado backtest hygiene). Frame every idea as a FACTOR with a
+   trader-behavior STORY (what real force on prices/traders it captures), not a black-box rule.
+2. **Gate EVERY candidate through `analysis/stats.assess`** (the rigor module). The bar is NOT "predicts the
+   outcome" (the calibrated mid does too) — it is "predicts the unpriced residual `won − mid` AFTER the
+   verified taker fee", **window-clustered**, **deflated for multiplicity**, with **n_loss ≥ 30** (else
+   report INSUFFICIENT, never a pass). Causal only (no look-ahead). Charge the live fee (`net_ev`,
+   `feeds.fetch_fee_schedule`), respect the −100% binary skew. A loss-light "pass" is the degenerate-CI
+   artifact that has fooled this project repeatedly — do not believe it.
+3. **Run the SECOND-MIND adversarial pass before believing ANY positive.** Spawn an independent agent (the
+   "second brain") whose job is to REFUTE the result: find the look-ahead/confound/bug, re-run the decisive
+   control (e.g. the joint-logistic "is it independent of the obvious priced variable" test that falsified
+   the B-filter and validated the over-round gate), check threshold robustness across a grid (deflate for
+   it), and stress the loss-light fragility (how many extra losers flip it). A positive that hasn't survived
+   an honest refutation attempt is not reported as real.
+4. **Make params adaptive the SAFE way (see `winning_strategies/README.md` → Adaptivity policy).** NEVER
+   re-fit a free threshold to recent data (that died OOS: `experiment_favtail_adaptive`, `config_tod`).
+   Self-normalize absolute **spread/size/move** constants via `analysis/adaptive.py` (causal trailing
+   percentile, **per coin** — pooling gates on the coin, not the regime); LEAVE FIXED probability/price-level
+   (`ask≥0.95`) and clock (`tl=30`) constants. Monitor live decay with `rolling_wilson_monitor`, not the
+   underpowered by-thirds split.
+5. **Be honest about the verdict and persist it.** Most ideas here are priced or fee-capped — say so plainly;
+   a clean kill is a real result. For a genuine candidate, write the experiment file, route it through the
+   gate, add a `winning_strategies/` card with its TIER + pre-registered LOCKED params, and save a memory.
+   Distinguish "signal real but fee-capped" from "no signal" — they have different fixes.
+
+Durable tooling already built for this (reuse, don't reinvent): `analysis/stats.py` (the gate),
+`analysis/adaptive.py` (self-normalizing + drift monitor), `analysis/gate_open_ideas.py`,
+`analysis/factor_inventory.py`, `net_ev.py` (fee authority), `experiment_overround_gate.py` (the template:
+candidate + joint-control + adaptive + monitor). See the "Research state" section below for what is already
+WALLED (don't re-run) vs the live candidates.
+
 ## Architecture: HYBRID (WebSocket primary + REST fallback)
 
 A deep-research pass (see memory `btc-updown-data-reliability`) established that
@@ -258,6 +295,19 @@ retail edge — efficient-on-knowledge (Grossman-Stiglitz), fee-taxed where the 
 only untested corner (maker-in-noise) is rebate-capped ~0.4% + adverse-selected, needs live fills.** STOP running
 directional/gating/favorite-tail variants. The durable asset is `analysis/stats.py` — gate EVERY future idea
 through `stats.assess`. Only revisit if fees drop materially or after months more data (re-gate on ≥30-50 losers).
+
+**UPDATE 2026-06-25b (RE-EXPERIMENT of every still-open idea — second-mind reviewed; see `POSTMORTEM.md` §1b +
+memory `program-walled-verdict`):** Re-ran every idea NOT yet *proven* dead on the now-larger data, each routed
+through the rigor gate via new **`analysis/gate_open_ideas.py`** and adversarially reviewed by an independent
+agent. Outcomes: **maker-in-noise** — the prior "0 modeled fills / empty cell" was a GATE BUG (toxicity gate
+read pre-entry flow at window-open where it's structurally `None`); removing it the cell POPULATES (2254 fills)
+and is **−0.365/$1** from mechanical adverse selection (fill model itself optimistic → upper bound) = DEAD, not
+"could not settle". **B risk-filter** — FALSIFIED: the alt's OWN 15s move gates better than BTC's and the
+cross-asset component is negative, so it's a generic favorite-momentum filter, not a BTC lead (now CHECK 5 in
+`validate_b_riskfilter.py`). **Token-fear FOLLOW** — signal REAL at the mid (resid +0.052, cluster-p=0.008, all
+6 coins) but fee-capped → FAILS net; only a fee-free maker-Down entry could flip it (parked, n≳1800). **Spike-fade**
+— DEAD (no dose-response across z; falling-knife fail). Net: the wall is *stronger*, every open corner now closed.
+Fixed `experiment_maker_noise.py` (book-depth-imbalance gate, reports the kill) + `validate_b_riskfilter.py`.
 
 Future drop-ins (when asked): a **Chainlink** price adapter in `feeds.py` to match
 resolution exactly; verified alt-specific tooling.

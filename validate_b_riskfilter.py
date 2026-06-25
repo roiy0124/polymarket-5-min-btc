@@ -132,6 +132,26 @@ def main():
     p_perm = sum(1 for x in null_perm if x >= gated["ev"]) / len(null_perm)
     c4 = (p_rand < 0.05) and (p_perm < 0.05)
 
+    # ---- CONTROL ARM (added 2026-06-25, second-mind review): falsify the CROSS-ASSET story ----
+    # B's whole claim is "BTC LEADS the alt." If the alt's OWN last-L-second move gates as well or
+    # better than BTC's, B is just a generic favorite-MOMENTUM filter (skip when the favorite is
+    # mid-move against you) with no cross-asset content. We re-mine the SAME positions using the
+    # alt's own per-second series as the gate signal and compare. On discovery data the own-momentum
+    # gate BEAT BTC's and B's orthogonal (BTC-minus-own) component was negative -> story falsified.
+    own = {c: Series(load_persec(c, 1e9)) for c in ALTS}
+    rows_own = {c: [] for c in ALTS}
+    for c in ALTS:
+        for ws, t, ask, sign, won in load_alt_positions(c, TL, MIN_ASK, max(3.0, 0.3 * TL)):
+            if ws < cutoff:
+                continue
+            a1 = own[c].at(t); a0 = own[c].at(t - L)
+            if not a1 or not a0 or a0 <= 0:
+                continue
+            rows_own[c].append((ask, won, sign * (a1 / a0 - 1.0)))
+    gated_own = [(a, w) for c in ALTS for (a, w, s) in rows_own[c] if s >= 0.0]
+    own_ev = ev_of(gated_own)["ev"] if gated_own else None
+    c5 = (own_ev is None) or (gated["ev"] > own_ev)      # B must beat its own-momentum twin
+
     def mark(b):
         return "PASS" if b else "FAIL"
     print(f"\n  CHECK 1 EV gated>baseline ............ {mark(c1)}  ({gated['ev']:+.4f} vs {base['ev']:+.4f})")
@@ -140,7 +160,13 @@ def main():
     print(f"  CHECK 3 per-coin + LOCO all + ........ {mark(c3)}  "
           f"(per-coin min {min(v for v in percoin.values() if v is not None):+.4f})")
     print(f"  CHECK 4 placebo p<.05 (rand & perm) .. {mark(c4)}  (rand p={p_rand:.3f}, perm p={p_perm:.3f})")
-    overall = c1 and c2 and c3 and c4
+    print(f"  CHECK 5 beats own-momentum control ... {mark(c5)}  "
+          f"(B-gated {gated['ev']:+.4f} vs alt-own-momentum {own_ev:+.4f})" if own_ev is not None
+          else f"  CHECK 5 beats own-momentum control ... {mark(c5)}  (no own-momentum positions)")
+    if own_ev is not None and not c5:
+        print(f"          -> cross-asset story FALSIFIED: the alt's OWN move gates >= BTC's, so B is a "
+              f"generic favorite-momentum filter, not a BTC lead.")
+    overall = c1 and c2 and c3 and c4 and c5
     print("\n  " + ("=" * 30))
     if args.all:
         print("  IN-SAMPLE DRY-RUN — machinery works. This is NOT validation (the edge was discovered")

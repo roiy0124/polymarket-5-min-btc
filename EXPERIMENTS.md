@@ -21,7 +21,44 @@ killed (or kept) cheaply by measurement instead of expensively by trading.
 
 ---
 
-## 2026-06-23 — FULL IDEA AUDIT + PER-COIN REPLICATION (read this first)
+## 2026-06-25 — RE-EXPERIMENT + FRESH FACTOR SWEEP + ADAPTIVITY (read this first)
+
+Three linked passes this session, all run through the rigor gate (`analysis/stats.assess`) and each
+positive adversarially second-mind reviewed. Full detail: `POSTMORTEM.md` §1b, `FACTOR-SWEEP-2026-06-25.md`,
+`winning_strategies/`, memories `program-walled-verdict` / `overround-gate-candidate` / `default-quant-workflow`.
+
+1. **Re-experimented every NOT-yet-dead idea** (`analysis/gate_open_ideas.py`): maker-in-noise "0 fills" was
+   a GATE BUG (cell populates → −0.365 adverse selection, dead across the WHOLE window per
+   `experiment_maker_timemap.py`); B risk-filter FALSIFIED (own-momentum gates better than BTC → not
+   cross-asset; now CHECK 5 in `validate_b_riskfilter.py`); token-fear FOLLOW = signal real at the mid
+   (resid +0.052, cluster-p=0.008) but fee-capped; spike-fade dead (no dose-response). Net: walled verdict
+   strengthened, but token-fear FOLLOW kept as a parked candidate (kill is cost, not absence of signal).
+
+2. **Fresh factor sweep from the under-mined WS data** (5 trader-lens agents → `analysis/factor_inventory.py`):
+   the corrected cross-token aggressor flow (CTAP) is PRICED (corr ~0); the Up/Down books are exact mirrors
+   75–81% of the time (one synthetic book); depth/micro-divergence priced. The ONE real signal = the
+   **OVER-ROUND** (`up_ask+down_ask−1`): makers widen the pair defensively when a near-certain favorite is
+   about to flip = their REVEALED FEAR. **Over-round-gated favorite-tail** (`experiment_overround_gate.py`):
+   lifts favorite-tail −0.006 → +0.0065 (per-coin self-normalizing +0.0091), and the gate signal is REAL +
+   ask-INDEPENDENT — joint logistic p=0.0006 (the first gate to pass the joint-control test the B-filter
+   FAILED). Still loss-light (7–13 < 30) → INSUFFICIENT, pre-registered as the best forward-signal candidate.
+
+3. **Adaptivity (don't fall behind over time)** (`analysis/adaptive.py`): the SAFE form is SELF-NORMALIZING
+   (causal trailing percentile, PER COIN — pooling gates on the coin not the regime), NOT re-fitting (that
+   died OOS). Classifier: self-normalize absolute spread/size/move constants; leave probability/clock
+   constants fixed. Powered drift monitor = `rolling_wilson_monitor` (the by-thirds split is blind <8pp). The
+   favorite-tail "decay" (losers 9→18) is NOT significant (p≈0.07), a higher-vol regime not erosion. Policy
+   in `winning_strategies/README.md`.
+
+**Standing policy added to CLAUDE.md** ("Default working method"): for ANY idea/signal/strategy work, apply
+the quant + data-analyst lens, the `stats.assess` gate, the second-mind adversarial refutation, and
+safe-adaptive params AUTOMATICALLY — without being asked. Live candidates now: **over-round gate** (best
+forward signal) + **token-fear FOLLOW** (closest to edge, fee-capped); both INSUFFICIENT/pre-registered, not
+armed. `live_runner.py` stays GATED.
+
+---
+
+## 2026-06-23 — FULL IDEA AUDIT + PER-COIN REPLICATION
 
 Re-ran/audited EVERY idea on current data (~22h alts, ~98h BTC); each verdict adversarially
 verified by an independent skeptic. Per-idea "potential / what's left to discover" detail is in
