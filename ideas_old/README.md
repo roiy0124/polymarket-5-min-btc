@@ -16,3 +16,7 @@ Each idea = one `.md` (thesis + verdict + revisit-conditions) + its experiment s
 | Idea | Verdict | Revisit if |
 |---|---|---|
 | [Fear stock-sell (stock-vs-stock)](fear-stock-sell.md) — `experiment_token_fear.py` | Fade DEAD (dump is informed, not fear); FOLLOW real all-coin residual +0.055 but **fee-capped** (net +0.02, placebo p=0.19, Wilson<be) | fees drop / spreads tighten / a larger-residual subset survives OOS |
+| [Open-imbalance overreaction fade](open-imbalance-fade.md) | DEAD — open price already calibrated at tl≈280 (slope 1.04, no overshoot); efficient 20s in | sub-second open-flow shows a transient overshoot that reverts + fee drop |
+| [Whale / large-print follow-through](whale-followthrough.md) | DEAD — whale direction doesn't predict beyond the mid (signed resid −0.002); big flow priced like avg flow | sub-second data shows the whale print leads the mid by an uncaptured lag |
+| [Spot-margin gate + favorite-tail STACK](spot-margin-stack.md) — `experiment_favtail_stack.py` | Margin is a REAL independent flip-predictor, but stacking on the over-round gate adds **zero** tradable EV (Δ+0.0005, P=0.52) — cuts the SAME losers (Jaccard 0.45) | a forward signal that cuts DIFFERENT losers (low Jaccard) than over-round appears |
+| [Sub-second spot staleness](subsecond-staleness.md) | Real sub-second lead at the mid (resid +0.026, raw-p=0.05) but **fee-capped** (win 56.6% < be 57.3%); confirm-gate on favorite-tail also failed (−0.005) | fees drop materially (residual already clears a smaller cost) |

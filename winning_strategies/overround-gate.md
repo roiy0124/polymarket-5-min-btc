@@ -60,6 +60,15 @@ within 0.95–0.97 tight loss 2.8% vs wide 6.7%; within 0.97–0.99 tight 2.0% v
 - **Lower fees / tighter spreads** would flip it directly (the gross edge already clears a smaller cost).
 - **Stack with the spot lead-lag** (the other forward signal): both are forward-underpricing gates on the same favorite-tail base; the additivity diagnostic (unbuilt) would say whether they combine.
 
+### Tested extension — spot-margin stack (2026-06-26, NO incremental edge → `ideas_old/spot-margin-stack.md`)
+The spot **margin** `|price_binance − strike|/strike` is a *genuinely independent* flip-predictor (survives
+controlling for both the ask and the over-round; losers sit closer to the strike, 5.9 vs 7.3 bps). But
+stacking a margin gate ON TOP of the over-round gate adds **nothing tradable**: Δ EV +0.0005 (CI spans 0,
+P=0.52), because the two signals cut the SAME losers (Jaccard 0.45 — near-strike windows are both
+low-margin AND wide-over-round). Lesson: orthogonal-as-signal ≠ orthogonal-in-which-losers-it-cuts. So
+margin stays a confirmed *covariate of flip-risk*, not a second gate; the single over-round gate remains
+the robust primary. `experiment_favtail_stack.py` is the additivity diagnostic.
+
 Do NOT re-tune `or_thresh`, `ask` band, or `tl` on this data (overfit trap — the B-filter died on its
 in-sample discovery). `live_runner.py` stays GATED. This is the best lead since the program walled —
 because its kill is **cost + power, not a falsified mechanism** (the mechanism passed the test that
