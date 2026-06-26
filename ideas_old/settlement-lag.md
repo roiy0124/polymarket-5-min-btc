@@ -35,8 +35,21 @@ basis-flip risk, and that risk (2.8%) is bigger than the lag (1.2% tolerance). I
 whole program, in its purest form: **Chainlink (the only thing that matters) is efficient, and our Binance
 proxy is not the settlement oracle.** Pennies in front of the basis-flip steamroller.
 
+## Attempted fix: DUAL-ORACLE agreement (Binance AND Pyth) — ALSO DEAD (the fix targets the wrong oracle)
+Tried requiring Binance AND Pyth to agree on the favored side, to remove the basis-flip windows. It looked
+better: margin≥3bp & Pyth-agree → n=907, 4 losers, net-EV +0.0070, **cluster-CI [+0.0021,+0.0109] excludes 0**,
+raw p=0.004, 5/6 coins positive, flip Wilson-UB 0.0113 now < the 0.0121 need. But the second-mind (agent
+a3f117a2) killed it: **the fix removes the wrong losers.** Decomposing the 5 single-oracle losers, the
+Pyth-agreement filter drops only 1 (the Pyth-disagree one) and KEEPS 4 — windows where Binance AND Pyth both
+agreed the favorite wins but **CHAINLINK** (a THIRD oracle) flipped it. The losses live in Chainlink, which
+neither proxy sees. Flip-rate improvement is +0.0009 at 3bp (one window), −0.0001 at 5bp. It's a single-point
+cherry-pick (only 3bp passes, by 0.0008, broken by +1 loser), fails deflation (p=0.56 at N=200), depth still
+~$71 (~$0.49 expected profit/window). Adding a second PROXY oracle cannot fix a tail that lives in the
+settlement oracle itself.
+
 ## Revisit if
 - A **Chainlink price adapter** is added to `feeds.py` (the CLAUDE.md drop-in): selecting the favorite on the
-  ACTUAL settlement oracle removes the basis-flip tail — THEN the convergence lag, if it survives on
-  Chainlink margins, could be real. This is the single most promising follow-up and the concrete reason to
-  build the Chainlink adapter. OR fees/depth improve. Params LOCKED; re-gate at ≥30 gated losers.
+  ACTUAL settlement oracle is the ONLY thing that removes the basis-flip tail (a second proxy like Pyth does
+  not — the losers are Pyth-agreed Chainlink flips). THEN the convergence lag, if it survives on Chainlink
+  margins, could be real. This is the single concrete unlock for this idea family. Params LOCKED; re-gate at
+  ≥30 gated losers. See memory `settlement-basis-wall`.
