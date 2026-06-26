@@ -69,6 +69,18 @@ low-margin AND wide-over-round). Lesson: orthogonal-as-signal ≠ orthogonal-in-
 margin stays a confirmed *covariate of flip-risk*, not a second gate; the single over-round gate remains
 the robust primary. `experiment_favtail_stack.py` is the additivity diagnostic.
 
+### Tested extension — maker entry in the gated windows (2026-06-26, breakeven, the FIRST non-adverse maker)
+A structural bonus of this gate: it identifies windows where MAKER provision on the favorite is *fair*, not
+adverse. Resting a maker bid on the favorite (1 tick below ask, fill-modeled from SELL prints, hold to 0/1,
+no fee): in ALL windows it's adverse (fill-conditional win 92.1% vs fill 0.952, resid −0.032), but in
+**over-round-TIGHT windows the fill is non-adverse** (win 95.7% vs fill 0.958, **resid −0.0007** — vs the
+−0.18 that killed the mid-band maker-in-noise). This is the only fee-free non-adverse fill the project has
+found. BUT maker-EV is only ~breakeven (−0.0001), NOT better than the taker gate: you fill just 45% of the
+time and on the favorites that *dropped* to your bid (win 95.7% < the taker's full-population 98.7%), so the
+fill-selection cost (~3%) cancels the spread saving (~1%). Keep the TAKER entry as primary; the maker variant
+becomes attractive only if Down-side spreads widen (more spread to save) or fills improve. Proves the gate
+finds maker-safe windows — a real, reusable structural fact.
+
 Do NOT re-tune `or_thresh`, `ask` band, or `tl` on this data (overfit trap — the B-filter died on its
 in-sample discovery). `live_runner.py` stays GATED. This is the best lead since the program walled —
 because its kill is **cost + power, not a falsified mechanism** (the mechanism passed the test that
