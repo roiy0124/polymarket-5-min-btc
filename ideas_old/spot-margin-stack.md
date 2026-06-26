@@ -35,6 +35,15 @@ coefficients does not imply additivity of tradable EV when the signals target th
   real, but its role is diagnostic). Not a standalone candidate.
 - The stack script is kept as the additivity diagnostic.
 
+## More loser-cutters screened (2026-06-26) — all fail the two-bar test
+Systematically screened additional favorite-tail loser-cutters for the rare partner that is BOTH low-Jaccard
+AND ask-independent (the two bars from [[additivity-overlap-lesson]]): spot-velocity-toward-strike,
+token-spread, favorite-persistence ([[favorite-persistence]] — low Jaccard but FAILS ask-control = priced
+ask-proxy), trade-VOLUME (Jaccard 0.40 but high volume is NEGATIVE for favorite-tail: −0.0078 alone, stack
+−0.0034 — more volume = more flips), trade-count, favorite book-depth (weak ask-coef). NONE clears both bars.
+**The over-round gate is the unique signal that is strong, low-overlap-irrelevant (it IS the benchmark), AND
+ask-independent.** No second forward signal exists to stack into a profitable edge on current data.
+
 ## Revisit if
-Find a forward signal that cuts DIFFERENT losers than the over-round gate (low Jaccard) — only then does
-stacking add EV. Re-gate on fresh data with ≥30 stacked losers. Params LOCKED, no re-tune.
+Find a forward signal that cuts DIFFERENT losers than the over-round gate (low Jaccard) AND survives the
+joint ask-control — only then does stacking add EV. Re-gate on fresh data with ≥30 stacked losers. LOCKED.
