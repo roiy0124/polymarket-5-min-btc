@@ -17,6 +17,7 @@ predictor. A Chainlink adapter can drop in here later.
 """
 
 import json
+import os
 import urllib.request
 import urllib.parse
 
@@ -210,3 +211,59 @@ def fetch_pyth(pyth_id=PYTH_BTC_ID, timeout=DEFAULT_TIMEOUT):
     data = _get_json(url, timeout=timeout)
     item = data["parsed"][0]["price"]
     return int(item["price"]) * (10 ** int(item["expo"]))
+
+
+# ---------------------------------------------------------------- Chainlink (the SETTLEMENT family)
+# The 5-min market settles on the Chainlink <COIN>/USD low-latency DATA STREAM (auth-gated). This reads
+# the FREE on-chain Chainlink aggregator (a slower proxy of the same oracle) via stdlib JSON-RPC eth_call
+# — the closest free signal to the actual settlement source, and much closer than Binance/Pyth for the
+# boundary/basis ideas (see memory `settlement-basis-wall`, ideas_old/settlement-lag.md).
+#
+# STATUS (2026-06-26): mechanism VERIFIED live (BTC/ETH read cleanly, fresh updatedAt). BUT a key finding
+# from building it: the free on-chain aggregator updates only on a HEARTBEAT (~1h for ETH; ~6min for BTC) or
+# a ~0.5% deviation — too COARSE to give a fresh price at every 5-min boundary. At a boundary it is often
+# stale, so Binance (live, sub-second) is actually the better REAL-TIME proxy; the gap that flips 5-min
+# outcomes is specifically to Chainlink's sub-second DATA STREAM. So this free adapter does NOT resolve the
+# settlement-lag basis (memory `settlement-basis-wall`); that requires AUTH-GATED Chainlink Data Streams
+# access (the user's credentials/subscription). Kept as the closest free Chainlink reference (for measuring
+# the slow basis + sanity checks), NOT a settlement-exact source. To go further you need Data Streams auth;
+# the alt addresses (SOL/XRP/DOGE/BNB) are also still TODO-verify and may not be on ETH mainnet.
+CHAINLINK_RPC = os.environ.get("CHAINLINK_RPC", "https://1rpc.io/eth")
+CHAINLINK_FEEDS = {                          # Ethereum-mainnet aggregator PROXY addresses, <coin>/USD
+    "btc": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",   # VERIFIED live
+    "eth": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",   # VERIFIED live
+    "bnb": "0x14e613AC84a31f709eadbdF89C6CC390fDc9540A",   # TODO verify (rate-limited on first read)
+    "sol": "0x4ffC43a60e009B551865A93d232E33Fce9f01507",   # TODO verify
+    "doge": "0x2465CefD3b488BE410b941b1d4b2767088e2A028",  # TODO verify
+    "xrp": None,                                            # TODO find/verify (may not be on ETH mainnet)
+}
+_RPC_HEADERS = {"Content-Type": "application/json", "User-Agent": _BROWSER_UA}
+
+
+def _eth_call(to, data, rpc=None, timeout=DEFAULT_TIMEOUT):
+    """Minimal stdlib JSON-RPC eth_call -> hex result string (no web3 dependency)."""
+    rpc = rpc or CHAINLINK_RPC
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                       "params": [{"to": to, "data": data}, "latest"]}).encode()
+    req = urllib.request.Request(rpc, body, _RPC_HEADERS)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        out = json.loads(resp.read().decode("utf-8"))
+    if "result" not in out:
+        raise RuntimeError(f"eth_call error: {out.get('error')}")
+    return out["result"]
+
+
+def fetch_chainlink(coin="btc", rpc=None, timeout=DEFAULT_TIMEOUT):
+    """Latest on-chain Chainlink <coin>/USD price + its updatedAt unix ts. Returns (price, updated_at)
+    or raises. `latestRoundData()` selector 0xfeaf968c -> (roundId, int256 answer, startedAt, updatedAt,
+    answeredInRound); `decimals()` selector 0x313ce567. Stale-guard on updatedAt is the caller's job."""
+    addr = CHAINLINK_FEEDS.get(coin)
+    if not addr:
+        raise ValueError(f"no Chainlink feed configured for {coin}")
+    decimals = int(_eth_call(addr, "0x313ce567", rpc, timeout), 16)
+    raw = _eth_call(addr, "0xfeaf968c", rpc, timeout)[2:]
+    answer = int(raw[64:128], 16)
+    if answer >= 2 ** 255:                   # int256 two's-complement
+        answer -= 2 ** 256
+    updated_at = int(raw[192:256], 16)
+    return answer / (10 ** decimals), updated_at
