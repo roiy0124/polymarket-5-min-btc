@@ -31,7 +31,15 @@ The reframe that re-opens the program. Two different games, and we were stuck in
 | **time** `t` | no — deterministic, we both have it | no edge | closed |
 | **strike** | fixed at open; both observe it (but on WHICH feed? see spot) | — | tied to spot |
 | **σ** (volatility) | yes — its ONE estimated input | tested: avg σ-error is **self-priced / EV-neutral** (VRP). Maybe wrong *conditionally* (regime change before its σ updates)? | mostly closed; conditional untested |
-| **spot / settlement feed** | **YES — structurally.** The maker prices off a proxy (Binance-like) but the market **settles on Chainlink**. If it can't/doesn't use the true settlement feed in real time, its spot input is *systematically wrong* by the basis dynamics. | **the OPEN component** — we just built the Chainlink layer to measure it | **OPEN — highest priority** |
+| **spot / settlement feed** | **YES — structurally, NOW CONFIRMED.** The maker prices off **BINANCE** (verified: maker-quote fit R²=0.75 vs Binance, 0.0007 vs Pyth; joint coef Binance +0.87 vs Pyth +0.01), but the market **SETTLES on Chainlink**. So its spot input is *systematically the wrong denomination/source* by the basis dynamics. | **the OPEN component** — maker=Binance CONFIRMED; build fair value on Chainlink (forward data) | **OPEN — highest priority** |
+
+**Step 1 of the program DONE (2026-06-27):** *which feed does the maker price off?* → **BINANCE, decisively**
+(R²=0.75 vs Pyth 0.0007, n=904k; experiment in `MAKER-MODEL.md`/chat). The market settles on Chainlink. So the
+maker's fair-value model has a STRUCTURAL input-error (Binance/USDT vs Chainlink/USD). Pyth data looks
+unreliable (Binance-Pyth log-ret corr only 0.019) → the decisive maker-vs-us comparison is Binance-vs-CHAINLINK,
+which the new Chainlink layer enables once ~weeks of forward data accrue. The edge (if any) = compute fair value
+on the TRUE oracle, trade the windows where it diverges from the maker's Binance quote, at the favorite (cheap
+fee) + near-strike where a few-bps basis flips Up/Down. **[VERIFIED maker=Binance; edge HYPOTHESIS pending data]**
 
 **The "string hierarchy" (play as high as you can):**
 - *Level 0* — predict the OUTPUT (the quote). Walled.
