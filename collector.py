@@ -69,6 +69,21 @@ def fetch_tick(pool, market, symbol, pyth_id):
     return out
 
 
+def latest_chainlink(conn, max_age=12.0):
+    """Most recent Chainlink price the WS collector streamed into price_ticks(source='chainlink'),
+    if fresh (<= max_age s). Cross-process bridge: ws_collector owns the Chainlink stream; the REST
+    collector reads its latest tick at strike/final time to record the true settlement-oracle value."""
+    try:
+        row = conn.execute(
+            "SELECT mid, recv_ts FROM price_ticks WHERE source='chainlink' "
+            "ORDER BY recv_ts DESC LIMIT 1").fetchone()
+    except Exception:
+        return None
+    if row and row[0] is not None and (time.time() - row[1]) <= max_age:
+        return row[0]
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description="5-min up/down REST collector (one coin)")
     ap.add_argument("--coin", default="btc", choices=list(coins.COINS),
@@ -175,12 +190,12 @@ def main():
 
                 # strike = first reading near the start of the window
                 if not strike_set and time_left >= STRIKE_MIN_LEFT and binance is not None:
-                    storage.set_strike(conn, start, binance, pyth, loop_t)
+                    storage.set_strike(conn, start, binance, pyth, latest_chainlink(conn), loop_t)
                     strike_set = True
 
                 # final = last reading just before the close
                 if not final_set and time_left <= 1.0 and binance is not None:
-                    storage.set_final(conn, start, binance, pyth, loop_t)
+                    storage.set_final(conn, start, binance, pyth, latest_chainlink(conn), loop_t)
                     final_set = True
 
             # --- settle closed windows ----------------------------------------

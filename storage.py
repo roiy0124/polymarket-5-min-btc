@@ -19,10 +19,12 @@ CREATE TABLE IF NOT EXISTS windows (
     -- strike = BTC price at window start (the "target price")
     strike_binance  REAL,
     strike_pyth     REAL,
+    strike_chainlink REAL,   -- Chainlink (the ACTUAL settlement oracle) at window start
     strike_ts       REAL,
     -- final = BTC price at window end
     final_binance   REAL,
     final_pyth      REAL,
+    final_chainlink REAL,    -- Chainlink at window end (the value the market settles on)
     final_ts        REAL,
     resolved_outcome TEXT,   -- official 'Up'/'Down' from Polymarket
     our_outcome      TEXT,   -- our calc: final >= strike ? 'Up' : 'Down'
@@ -112,8 +114,19 @@ def connect(path):
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=30000")   # wait, don't fail, on a write lock
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.commit()
     return conn
+
+
+def _migrate(conn):
+    """Idempotent column adds for existing DBs (CREATE TABLE IF NOT EXISTS won't alter them). Safe to
+    run on every connect — a duplicate-column ALTER raises OperationalError, which we swallow."""
+    for col in ("strike_chainlink", "final_chainlink"):
+        try:
+            conn.execute(f"ALTER TABLE windows ADD COLUMN {col} REAL")
+        except sqlite3.OperationalError:
+            pass   # column already exists
 
 
 # ---- batch writers for the high-frequency WS streams -----------------------
@@ -175,15 +188,16 @@ def upsert_window(conn, m, window_end, created_at):
     conn.commit()
 
 
-def set_strike(conn, window_start, binance, pyth, ts):
+def set_strike(conn, window_start, binance, pyth, chainlink, ts):
     conn.execute(
-        "UPDATE windows SET strike_binance=?, strike_pyth=?, strike_ts=? WHERE window_start=?",
-        (binance, pyth, ts, window_start),
+        "UPDATE windows SET strike_binance=?, strike_pyth=?, strike_chainlink=?, strike_ts=? "
+        "WHERE window_start=?",
+        (binance, pyth, chainlink, ts, window_start),
     )
     conn.commit()
 
 
-def set_final(conn, window_start, binance, pyth, ts):
+def set_final(conn, window_start, binance, pyth, chainlink, ts):
     our = None
     row = conn.execute(
         "SELECT strike_binance FROM windows WHERE window_start=?", (window_start,)
@@ -191,8 +205,9 @@ def set_final(conn, window_start, binance, pyth, ts):
     if row and row[0] is not None and binance is not None:
         our = "Up" if binance >= row[0] else "Down"
     conn.execute(
-        "UPDATE windows SET final_binance=?, final_pyth=?, final_ts=?, our_outcome=? WHERE window_start=?",
-        (binance, pyth, ts, our, window_start),
+        "UPDATE windows SET final_binance=?, final_pyth=?, final_chainlink=?, final_ts=?, our_outcome=? "
+        "WHERE window_start=?",
+        (binance, pyth, chainlink, ts, our, window_start),
     )
     conn.commit()
 

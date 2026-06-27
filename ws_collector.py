@@ -37,6 +37,7 @@ import storage
 # DB path + Binance stream are per-coin (resolved in main() from --coin).
 MARKET_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 BINANCE_WS_T = "wss://stream.binance.com:9443/ws/{}@bookTicker"
+CHAINLINK_WS = "wss://ws-live-data.polymarket.com"   # Polymarket RTDS = the ACTUAL settlement oracle
 WINDOW_SECONDS = 300
 INACTIVITY_TIMEOUT = 20.0      # reconnect market WS after this many seconds of silence
 PROACTIVE_RECONNECT = 60.0     # also cycle the market WS this often to pre-empt freezes
@@ -76,7 +77,7 @@ class State:
         self.book_buf = []
         self.trade_buf = []
         self.btc_buf = []
-        self.stats = {"book": 0, "trade": 0, "btc": 0, "reconnects": 0, "proactive": 0}
+        self.stats = {"book": 0, "trade": 0, "btc": 0, "chainlink": 0, "reconnects": 0, "proactive": 0}
 
 
 def _subscribe_msg(assets):
@@ -229,6 +230,63 @@ async def binance_consumer(state):
             await asyncio.sleep(RECONNECT_BACKOFF)
 
 
+# ---- Chainlink settlement oracle (Polymarket RTDS) --------------------------
+
+async def chainlink_consumer(state):
+    """Stream the ACTUAL settlement oracle: Polymarket RTDS `crypto_prices_chainlink` for this coin's
+    <coin>/usd (~1/s, public, no auth). App-level PING every 5s. Writes to price_ticks with
+    source='chainlink' (reuses the btc_buf -> insert_price_ticks path; pruned at RETAIN_DAYS like Binance.
+    The DURABLE per-window strike/final Chainlink is recorded separately by collector.py into `windows`)."""
+    pair = coins.chainlink_pair(state.coin)
+    # NOTE: the `filters` value is a STRING the server compares whitespace-SENSITIVELY -> must be COMPACT
+    # JSON ({"symbol":"btc/usd"}); json.dumps's default ", " / ": " separators add spaces that match NOTHING.
+    sub = json.dumps({"action": "subscribe", "subscriptions": [
+        {"topic": "crypto_prices_chainlink", "type": "*",
+         "filters": json.dumps({"symbol": pair}, separators=(",", ":"))}]})
+    while state.running:
+        try:
+            async with websockets.connect(CHAINLINK_WS, ping_interval=None, max_size=None) as ws:
+                await ws.send(sub)
+                last_ping = time.time()
+                while state.running:
+                    if time.time() - last_ping > 5.0:
+                        try:
+                            await ws.send("PING")
+                        except Exception:
+                            pass
+                        last_ping = time.time()
+                    try:
+                        msg = await asyncio.wait_for(ws.recv(), timeout=6.0)
+                    except asyncio.TimeoutError:
+                        continue
+                    recv_ts = time.time()
+                    try:
+                        d = json.loads(msg)
+                    except (ValueError, TypeError):
+                        continue
+                    if not (isinstance(d, dict) and d.get("topic") == "crypto_prices_chainlink"):
+                        continue
+                    # 'update' = single {symbol,value,timestamp}; the initial snapshot (payload.data=[...])
+                    # is skipped — we want the live stream, not backfill.
+                    if d.get("type") != "update":
+                        continue
+                    p = d.get("payload") or {}
+                    val = p.get("value")
+                    if val is None:
+                        continue
+                    try:
+                        val = float(val)
+                    except (TypeError, ValueError):
+                        continue
+                    state.btc_buf.append((recv_ts, utc(recv_ts), "chainlink",
+                                          None, None, val, p.get("timestamp")))
+                    state.stats["chainlink"] += 1
+        except Exception as e:
+            print(f"[{time.strftime('%H:%M:%S')}] chainlink ws error: {e!r}", flush=True)
+        if state.running:
+            await asyncio.sleep(RECONNECT_BACKOFF)
+
+
 # ---- buffered writer --------------------------------------------------------
 
 def _flush(state, conn):
@@ -255,7 +313,7 @@ async def flusher(state, conn):
         if time.time() - last_report >= 30:
             s = state.stats
             print(f"[{time.strftime('%H:%M:%S')}] events  book={s['book']}  "
-                  f"trades={s['trade']}  price_ticks={s['btc']}  "
+                  f"trades={s['trade']}  price_ticks={s['btc']}  chainlink={s['chainlink']}  "
                   f"reconnects={s['reconnects']} proactive={s['proactive']}", flush=True)
             last_report = time.time()
 
@@ -293,6 +351,7 @@ async def main(coin):
         asyncio.create_task(window_manager(state)),
         asyncio.create_task(market_consumer(state)),
         asyncio.create_task(binance_consumer(state)),
+        asyncio.create_task(chainlink_consumer(state)),
         asyncio.create_task(flusher(state, conn)),
         asyncio.create_task(pruner(state)),
     ]

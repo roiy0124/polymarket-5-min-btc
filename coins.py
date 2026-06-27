@@ -68,6 +68,12 @@ def binance_symbol(coin):
     return COINS[coin].binance
 
 
+def chainlink_pair(coin):
+    """Polymarket RTDS `crypto_prices_chainlink` symbol for the coin's USD feed, e.g. 'btc/usd'.
+    This is the ACTUAL settlement oracle stream (public, no auth) — fresher than the on-chain feed."""
+    return f"{coin}/usd"
+
+
 def color(coin):
     return COINS[coin].color
 
