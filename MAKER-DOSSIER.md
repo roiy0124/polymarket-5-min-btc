@@ -1,0 +1,137 @@
+# THE MAKER — everything we know (dossier, 2026-06-27)
+
+The canonical, plain-language reference on the counterparty we trade against in the Polymarket 5-min crypto
+Up/Down markets. Every claim is tagged **[VERIFIED]** (we ran the test), **[STRONG INFERENCE]** (the data
+strongly implies it), or **[HYPOTHESIS]** (plausible, not yet pinned). Chronological findings + scripts live
+in `MAKER-MODEL.md`; this is the consolidated "what we know."
+
+---
+
+## 1. Who/what the maker IS
+
+- **The market is a CLOB** (central limit order book), not an AMM. Every price is a resting limit order. The
+  "maker" = whoever posts the resting bid/ask depth; the "taker" = whoever crosses the spread. **[VERIFIED]**
+- **It is ONE algorithmic, synthetic-book market-maker per coin** — not a crowd. Evidence: the Up and Down
+  order books are **exact mirrors (same prices + sizes, down = 1 − up) in 75–81% of snapshots.** A human/crowd
+  can't produce that; one bot prices the Up token and *derives* the Down book by reflection. **[STRONG INFERENCE]**
+- **It earns a maker rebate**; the reward function found in the wild (warproxxx/poly-maker) is roughly
+  `S = ((v−s)/v)²·b` — paid most for resting *exactly at the mid*. That financial incentive is *why* its quote
+  is pinned to fair value (deviations cost it rebate). **[STRONG INFERENCE]**
+
+## 2. How it PRICES (its model — and why we can't out-predict it)
+
+- **It is a digital-option fair-value bot:** `up_mid ≈ Φ(ln(spot/strike) / (σ·√t))` — fits at **R² = 0.91**
+  (btc/eth/doge). Φ = normal CDF; t = time remaining. **[VERIFIED]**
+- So it responds, overwhelmingly, to just three things: **spot − strike, time-decay, and σ.** The first two we
+  can NEVER beat — it has the same spot feed and the same closed-form model. *This is why every directional /
+  "predict the outcome" idea is walled: we'd be out-predicting a bot running the exact right model on the same
+  data.* **[VERIFIED]**
+- **σ is its one free parameter** — the only place it can be "wrong":
+  - It tracks realized vol (`corr(implied σ, realized σ) ≈ +0.74`) — adaptive and competent. **[VERIFIED]**
+  - It **pads vol ~15%** (median implied/realized ≈ 1.15) = a structural **Variance Risk Premium** (it charges
+    for uncertainty, like any MM). **[VERIFIED]**
+  - Its effective σ **varies ~2×** across windows (IQR ≈ 4.7e-5 → 1.0e-4 per √s ≈ 27%–58% annualized). **[VERIFIED]**
+
+## 3. How it MANAGES RISK (its behavior)
+
+- **The over-round (`up_ask + down_ask − 1`) is its spread = its self-reported confidence.** Baseline ~1–2%;
+  it **widens when the outcome is genuinely uncertain** (`corr(over_round, |outcome − mid|) ≈ +0.17`). **[VERIFIED]**
+- **It has a volatility circuit-breaker + hysteresis-cancel:** on fast moves it stops/freezes quoting (re-quotes
+  only on a >0.5c move) and **lets one side thin** — our data confirms the footprint (one-sidedness rises with
+  spot-move size, `corr +0.077`; a side goes near-empty 3.5% → 5.6% of the time in fast moves). **[VERIFIED]**
+- **It steps away precisely when flow is INFORMED.** When the book goes one-sided during a spike, the price
+  **continues** (signed forward mid +0.040 vs +0.005 baseline = 8×; only 28% revert). The bot is *defending
+  itself against toxic flow* — it is being smart, not making a mistake. **[VERIFIED]**
+
+## 4. What we PROVED about beating it (the walls — and WHY each is a wall)
+
+| we tried to exploit… | result | the reason |
+|---|---|---|
+| **vol-confidence** (over-round / VRP / σ-error) | walled | the bot **self-prices its own confidence** → reading it is EV-neutral vs random (loss-rate p=0.013 but **EV p=0.30**), non-stationary |
+| **circuit-breaker** (spike one-sidedness, provide the abandoned liquidity) | walled | the one-sided moment is **informed continuation** → providing liquidity = adverse selection |
+| **inventory skew** (calm one-sidedness, expect it to unwind) | walled | calm one-sidedness is **priced momentum, not a reverting mistake** (`corr +0.093`, continues) |
+| **directional / momentum / lead-lag** (predict the outcome) | walled | the mid already prices it (efficient-on-knowledge); a faster feed is fee-capped |
+
+**The unifying truth:** *depth one-sidedness ALWAYS predicts continuation (spike +0.32, calm +0.09), NEVER
+reversion → providing liquidity to the maker is adverse-selected at every condition tested.* The bot's quote
+is fair value and its one-sidedness is *informed*. **It makes no exploitable mistakes.** This is exactly what
+walled the two real public MM operators (adverse selection + queue-position opacity). **[VERIFIED]**
+
+The ONE thing that came closest: the **over-round gate** — skip the favorite-tail when the bot's over-round is
+wide (its revealed fear). The *signal* is real and independent of the ask (joint logistic **p=0.0006**) and
+lifts favorite-tail from breakeven-negative to **+0.006/+0.009**, but it's **loss-light (INSUFFICIENT)** and
+the gross edge barely clears the fee. It's a candidate, not a winner. **[VERIFIED]**
+
+## 5. The COST structure (the other half of why it's hard)
+
+- **Taker fee = `0.07·(1−p)` per stake** (verified live): **~0.2% at p=0.97** (cheap — favorite tail), **~3.5%
+  at p=0.5** (brutal — mid). So directional edges only survive at high p; mid-price edges are fee-walled. **[VERIFIED]**
+- **Maker = fee-free + a tiny capped rebate (~0.4%)** but **adverse-selected** — a resting bid fills when
+  informed flow crosses it. The ONLY non-adverse maker fill we found is on the favorite in **over-round-tight
+  (calm) windows** (fill-conditional residual −0.0007 ≈ fair), but it's only breakeven (you fill the weaker
+  favorites). The mid-band maker is **−0.36** (catastrophic adverse selection). **[VERIFIED]**
+- **The fee IS the price of the edge** (Grossman-Stiglitz): Polymarket introduced it to neutralize exactly the
+  latency arb people keep re-finding. **[VERIFIED]**
+
+## 6. METHODOLOGY facts about reading the maker (learned the hard way)
+
+- **Polymarket's `side` (BUY/SELL) field is only ~59% accurate** vs on-chain ground truth (arXiv, 30B ticks;
+  Lee-Ready is ~81% on real exchanges). **This is why every flow/CTAP signal we built came out ≈0** — we were
+  feeding it a coin-flip. **Never sign flow by `side`; use price+size deltas or L2 reconstruction.** **[VERIFIED]**
+- **Inventory/one-sidedness lives in the DEPTH, not the mid** ("prices for score, sizes for view") — measure
+  `overall_ratio = bid_depth/(bid+ask)`, not a mid move. We built `analysis/book_reconstruct.py` (validated
+  99.79% vs the feed's own best_bid/ask) to see it. **[VERIFIED]**
+
+---
+
+## 7. WHY we now collect the Chainlink data (the new layer)
+
+**The single most important thing the maker and we were both blind to: the market does NOT settle on Binance.**
+
+- **The market settles on the Chainlink `<coin>/USD` oracle** (price at T=0 vs T=300). We had been *proxying*
+  it with Binance `BTCUSDT` and Pyth — neither is the settlement source. **[VERIFIED]**
+- The Chainlink settlement feed turned out to be **public over WebSocket** (`wss://ws-live-data.polymarket.com`,
+  topic `crypto_prices_chainlink`, ~1/s, no auth) — previously we thought it was auth-gated. We now **capture
+  it** into `price_ticks(source='chainlink')` + durable per-window `windows.strike_chainlink`/`final_chainlink`. **[VERIFIED]**
+- **First finding from the layer:** Binance(BTC**USDT**) vs Chainlink(BTC/**USD**) is a **near-constant ~16 bps
+  (~$100) offset (std 3)** = the **USDT/USD denomination basis** (Tether trading ~0.16% rich), NOT a fluctuating
+  price basis. **[VERIFIED]**
+
+**Why this matters / what the Chainlink layer unlocks:**
+1. **It explains why our Binance proxy mostly worked** (and why idea-D "Chainlink basis" was dead): a *constant*
+   denomination basis **cancels in the outcome** (strike and final are both in the same denomination, so
+   `final ≥ strike` is ~unaffected). **[STRONG INFERENCE]**
+2. **The residual, non-cancelling part is the only un-measured corner** — when USDT/USD *moves within the
+   5-min window*, or in **near-strike flips** where even a tiny basis decides Up vs Down. That residual is the
+   one place the settlement basis could still pay, and **we could not see it until now.** **[HYPOTHESIS — to test
+   on forward data]**
+3. **Sharper favorite selection** — pick the favorite on the *true* settlement oracle, removing the ~3.6% of
+   windows where Binance and Chainlink disagree on the winner. This noise currently dirties the over-round gate
+   (our best candidate); cleaning it could matter for a loss-light edge. **[HYPOTHESIS — to test]**
+4. **A clean convergence-lag re-test** — the settlement-lag idea died on the *basis*; on the real oracle that
+   confound is removed. **[HYPOTHESIS — to test]**
+
+We need ~weeks of forward Chainlink data before any of (2)–(4) can be tested honestly (we have no history; the
+collector started logging it 2026-06-27).
+
+---
+
+## 8. What we still DON'T know (open questions)
+
+- The bot's **exact σ estimator** and circuit-breaker thresholds (we measured behavior, not the recipe). **[unknown]**
+- Whether it's truly **one** MM or a few coordinated (mirror evidence ⇒ ~one, not certain). **[unknown]**
+- The **residual settlement basis** behavior — now measurable, needs forward data. **[unknown]**
+- Whether the **over-round gate** survives on fresh data with ≥30 losers (pre-registered, loss-light today). **[unknown]**
+
+## One-paragraph summary
+
+We trade against a single, competent, automated fair-value market-maker per coin that prices each token as a
+digital option `Φ(ln(spot/strike)/(σ√t))` (R²=0.91), pads its volatility ~15% (a variance risk premium),
+widens its spread when genuinely uncertain, and defends itself against fast/informed flow by thinning one side
+(a circuit-breaker). Every way we tried to exploit it is walled for a coherent reason: it self-prices its
+confidence, its one-sidedness is *informed continuation* (never reversion, so providing liquidity is always
+adverse-selected), and the taker fee taxes exactly the mid-prices where any edge would live. It makes no
+exploitable mistakes. The one genuinely un-mined corner is **not the maker at all** — it's the **settlement
+oracle**: the market settles on Chainlink/USD, we proxied with Binance/USDT, and the ~16 bps denomination basis
+mostly cancels but leaves a residual (USDT moving intra-window, near-strike flips) we can only now measure with
+the freshly-added Chainlink layer.
