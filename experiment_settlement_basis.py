@@ -19,6 +19,16 @@ stats.assess. DO NOT read a verdict from it yet; DO NOT arm live_runner. See the
 CAUSAL discipline: every signal input is the tick AT/BEFORE the decision instant (strict newest-before, no
 two-sided tolerance). final_* / resolved_outcome are used ONLY as the LABEL and in the realized-stats sections.
 
+RESEARCH-CONFIRMED ENCODING (deep-research Topic 2, 2026-06-28; RESEARCH-EXTERNAL.md): Polymarket's own market
+rule is verbatim "the price according to Chainlink DATA STREAM BTC/USD, not other sources or spot markets";
+Up iff final >= strike with TIES (final==strike) resolving UP. The settled value is the Chainlink DON-consensus
+MEDIAN (a MULTI-VENUE aggregate), so the basis we trade is Binance(single-venue) vs Chainlink-median — flips are
+driven by BINANCE-IDIOSYNCRATIC moves the median doesn't follow (smaller/noisier than a clean two-feed gap).
+There is NO oracle-sniping/OEV/MEV angle (the snapshot is non-movable; we can only position BEFORE). The binding
+wall is Synthetix's economic law fee < exploitable-move; the USDT/USD basis is tens of bps, two-sided, mostly
+cancels and is NOT a predictable drift. (Open: Polymarket's exact report-selection at the boundary is unconfirmed
+by docs.)
+
     python experiment_settlement_basis.py [--tl 30] [--kappa 0.5] [--coins all]
 """
 import argparse

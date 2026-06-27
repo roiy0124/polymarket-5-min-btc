@@ -56,3 +56,50 @@ prior, large build.** Nesting-arb is structurally weak/fleeting/capacity-bounded
 
 **Actionable:** (a) fee model confirmed correct — no code change; (b) cross-venue-gap refuted — reshape Topic 4;
 (c) park the vol-term-structure-maker idea as LOW-priority (needs 15m collection + collides with maker wall).
+
+---
+
+## Topic 2 — Settlement-oracle mechanics & exploitation (2026-06-28) — VALIDATES + bounds Thread B
+
+**Question:** how is the settlement ORACLE exploited in oracle-settled short-dated binaries; what are the exact
+Chainlink settlement semantics to encode for our Thread B (maker-prices-Binance / market-settles-Chainlink)?
+
+**Verdict: premise VERIFIED, harness CORRECT, edge BOUNDED (consistent with the wall).** 107 agents, adversarially
+verified.
+
+### Verified findings (3-0 unless noted)
+1. **Settlement = Chainlink Data Streams BTC/USD, NOT Binance.** Polymarket's own market-page rule (primary):
+   "this market is about the price according to Chainlink **data stream** BTC/USD, **not according to other
+   sources or spot markets**." Our Thread B premise is fully primary-sourced.
+2. **Semantics to encode:** Up iff `final ≥ strike`; **ties (final == strike) resolve UP** ("greater than OR
+   equal to"). (Near measure-zero on a high-precision price.) Our harness uses exactly this (label = official
+   `resolved_outcome`).
+3. **The settled value is the DON consensus MEDIAN** (multi-venue aggregate, int192), pulled off-chain and
+   verified on-chain at resolution — so the basis is **Binance(single venue) vs Chainlink-multi-venue-median**,
+   NOT a clean USDT/USD two-feed gap. Flips are driven by **Binance-idiosyncratic moves** the median doesn't
+   follow → "smaller and noisier than a clean two-feed gap." Our harness (decision-time median vs Binance)
+   captures this correctly.
+4. **Data Streams v3 = sub-second, schema has second-precision timestamps** (validFromTimestamp /
+   observationsTimestamp / expiresAt), int192 DON-median price, simulated bid/ask. The settlement is a sub-second
+   pull report — do NOT model it as a stale push value (heartbeat/deviation applies to the *push* aggregator, a
+   different feed).
+5. **Oracle-sniping / OEV / latency-arb / Synthetix front-running does NOT transfer** (multiple 0-3/1-2 refutals):
+   every technique needs a *movable, mempool-observable* stale on-chain price; a one-time settlement SNAPSHOT
+   offers none — you can only position BEFORE. No MEV angle; Synthetix is precedent, not transferable technique.
+6. **Binding wall (Synthetix's economic law):** an edge needs `fee < exploitable move`. Against our verified
+   taker fee and a near-zero/noisy residual, this is the constraint that walls it — consistent with the standing
+   verdict. USDT/USD basis ≈ tens of bps, two-sided, largely cancels; the **persistence/AR(1) and depeg-severity
+   sub-claims were REFUTED** → do NOT model the basis as a predictable slow drift.
+
+### Refuted / cautions
+- The v3 report's bid/ask as a model-able settlement residual — **refuted 0-3** (settlement uses the MEDIAN only).
+- Polymarket's exact report-selection at the boundary (which validFrom/observations report settles the snapshot)
+  is NOT established by docs — confirm against the resolution contract before encoding boundary logic.
+- The crypto stream's exact sub-second cadence (100ms/500ms/1s) is unquantified anywhere.
+
+### My synthesis / actionable
+Topic 2 **sharpens** Thread B (settlement = DON median not pure Binance; ties→Up; no-sniping; fee<move is the
+wall) and **confirms the harness is structurally right**. It does NOT produce a new edge — it explains WHY the
+residual is likely sub-fee. The research's own #1 open question ("is the near-strike Binance-vs-median residual's
+tail ever > fee, gated through stats.assess") is *exactly* what `experiment_settlement_basis.py` measures →
+**data-gated, unchanged plan.** Encoding confirmations added to the harness docstring.
