@@ -118,9 +118,27 @@ reconstructed points), framed as recent-regime SCREENS not proof:
 making an exploitable mistake. The vol-spike one-sidedness is MORE informed, not less. Both legs now closed:
 taker = fee-walled, maker = adverse-selected.
 
-**WHAT'S LEFT in the L2 program:** the reconstruction primitive is reusable. The remaining un-tested L2 idea
-is INVENTORY skew = one-sidedness WITHOUT a vol spike (calm flow-accumulation the bot must unwind), which —
-unlike the toxic circuit-breaker — MIGHT revert. Prior is guarded (the earlier 1/s side-flow probe found flow
-absorbed/non-reverting, but `side` is 59% noise so the L2 depth ratio is a cleaner test). One clean screen
-next; if dead, the "trade-the-maker" program is itself walled (consistent with the MM postmortems = adverse
-selection). Persistent collector L2 layer DEFERRED until/unless an L2 idea screens positive.
+**INVENTORY SKEW — DEAD (the last clean L2 idea).** Screen (no fee/fill, CALM one-sidedness, n=6119):
+corr(depth ratio−0.5, forward mid) = **+0.093 (POSITIVE = momentum/continuation, NOT reversion)**, 47% revert.
+A calm one-sided book does NOT unwind — it weakly CONTINUES (priced order flow). Spike contrast +0.316
+confirms the gradient: **depth one-sidedness ALWAYS predicts continuation (spike +0.32, calm +0.09), NEVER
+reversion** → providing liquidity on the heavy/abandoned side is adverse-selected at EVERY condition.
+
+## VERDICT — the "trade-the-maker" / maker-microstructure family is WALLED (2026-06-27)
+Every face of the bot tested, every one walled, each for a coherent reason:
+- **vol-confidence** (over-round / VRP / σ-error): the bot SELF-PRICES it → mined out (EV-neutral vs random).
+- **circuit-breaker** (spike one-sidedness): the bot correctly STEPS AWAY from informed flow → adverse.
+- **inventory skew** (calm one-sidedness): it's priced momentum, NOT a reverting mistake → adverse/absorbed.
+The unifying truth: **the maker bot does not make exploitable mistakes — its quote is fair-value (R²=0.91),
+its one-sidedness is informed continuation, and providing liquidity is adverse-selected** (exactly what walled
+the two real MM operators). The directional/knowledge family was walled before; now the maker/microstructure
+family is too. We are STRICTLY AHEAD of the public frontier and did it rigorously, but the empirical answer is:
+no exploitable maker seam.
+
+**What we gained (durable):** `analysis/book_reconstruct.py` (validated L2 primitive); a complete, rigorous map
+of WHY the maker side is walled; and we NEVER built the expensive persistent L2 collector layer for a dead idea
+(test-before-build discipline paid off twice). **Remaining genuinely-NEW unblocked thread: the SETTLEMENT BASIS**
+— Chainlink's actual settlement oracle is public over WS (`wss://ws-live-data.polymarket.com`), a DIFFERENT
+opponent (the oracle, not the maker), the one thing previously blocked and now accessible. After that: more
+data / fee drop on the loss-light candidates (over-round gate, token-fear FOLLOW). Persistent L2 collector layer
+NOT built (no L2 idea screened positive).
