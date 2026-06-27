@@ -103,3 +103,52 @@ wall) and **confirms the harness is structurally right**. It does NOT produce a 
 residual is likely sub-fee. The research's own #1 open question ("is the near-strike Binance-vs-median residual's
 tail ever > fee, gated through stats.assess") is *exactly* what `experiment_settlement_basis.py` measures →
 **data-gated, unchanged plan.** Encoding confirmations added to the harness docstring.
+
+---
+
+## Topic 3 — How profitable traders ACTUALLY operate + maker-rewards economics (2026-06-28) — THE one open lead
+
+**Question:** what real, documented edges do profitable Polymarket participants use, and (crucially) do
+maker-rewards flip the adverse-selected maker to net-positive on the 5-min book?
+
+**Verdict: ONE genuinely-open, on-topic, testable lead — the MAKER-REWARDS SUBSIDY vs adverse selection on the
+5-min book — which our prior maker-walls never credited.** Everything else refuted or out-of-scope. 104 agents.
+
+### The lead (verified mechanics, open economics)
+- **Maker-rewards program is real + formula-documented (3-0, Polymarket primary docs):** reward score
+  `S(v,s) = ((v − s)/v)² · b` (v = per-market max spread, s = distance from the size-adjusted mid, b =
+  at-the-money/in-game multiplier). Pays MOST for resting nearest the mid; scales with size; **paid daily in
+  cash** (PUSD), $1/day floor, no rollover. Two-sided required (tails strictly; mid-band one-sided penalized by
+  c=3.0). Payout is YOUR_score / Σ(all makers' scores) — a **shared pool**.
+- **Why it's a real gap in our walls:** rewards pay for *resting/quoting*; adverse selection only bites on
+  *fills*. Our maker kills (maker-in-noise −0.365, maker-timemap −0.13..−0.18) measured **fill-conditional** P&L
+  — they did NOT credit the daily reward on the (much larger) un-filled resting volume. The at-the-money `b`
+  rewards quoting near 0.50, and the 5-min book sits near 0.50 much of the window = structurally favorable.
+- **The open question (no source closes it):** does the subsidy EXCEED adverse-selection cost on the 5-min book?
+  Testable only with live fills + the live `rewardsConfig` (max-spread v, min-size, c, b, daily pool) per market.
+
+### Verified-but-not-for-us / refuted
+- **Profits are hyper-concentrated:** top 1% take 76.5% of profit; ~1,200 users take >half (SSRN 6443103). The
+  paper's "makers win, takers lose" is a **population avg over months-long EVENT markets** — does NOT establish a
+  5-min ~50/50 maker wins (our adverse-selection finding can co-exist). The pool is shared → pros dilute it.
+- **Whale-flow-leads-price: REFUTED for crypto** (the large-trade-order-imbalance result is 2024 ELECTION
+  markets only; does not transfer to short-dated crypto). Relevant since the user runs a whale-tracker — it
+  does NOT port here.
+- **UMA dispute edge: OUT OF SCOPE** — touches only UMA-resolved *event* markets; the crypto Up/Down markets
+  resolve automatically via Chainlink, no human dispute. No resolution-layer edge for us.
+- **Cross-market / combinatorial arb:** ~$40M extracted but mostly *intra-market* YES/NO rebalancing that the
+  matcher collapses for a single binary; cross-market leg ~$95K, sub-100ms bots. Not transferable.
+- **Cross-platform (Polymarket vs Kalshi):** real 2-4% deviations but un-nettable / hold-to-resolution
+  capital-locked; APYs come from short horizons not mispricing. Tangential.
+- **Cross-platform vs options:** BTC threshold "Yes" overpriced 5.6-6.3pp but delta-hedged proxy borderline
+  (p=0.053, CI crosses 0) and **long-dated low-prob** contracts — opposite end from our 5-min ~50/50.
+
+**This pre-answers Topic 4** (cross-venue / derivatives lead-lag): its core — the Polymarket-vs-Binance-option
+gap and whale/large-flow lead — was refuted here AND in Topic 1; the latency-taker version is our already-walled
+edge. A literal Topic 4 would be redundant.
+
+### Decision
+The sweep's net: exactly ONE untested, on-topic lead = **maker-rewards-subsidy vs adverse selection on the 5-min
+book.** Next step (executing "test ideas until a solid edge"): pull the live `rewardsConfig`, then a feasibility
+harness — BEST-CASE daily reward per $ resting (from the formula + pool) vs our MEASURED adverse-selection cost.
+Kill if best-case reward < adverse-selection cost; else it's a (live-fills-gated) candidate.
