@@ -95,3 +95,32 @@ and the Chainlink settlement WS as LAYERS on the existing per-coin collectors/DB
 test the fee-free maker circuit-breaker + inventory-reversion on the accumulated L2 stream. See memory
 `trade-the-maker`. Bottleneck reminder: everything is loss-light (~38 favorite-tail losers) — L2 capture also
 accumulates the data we're starved on.
+
+## UPDATE 2026-06-27b — L2 reconstruction built+validated; circuit-breaker MAKER leg KILLED on existing data
+
+**Built + VALIDATED the L2 reconstruction primitive** (`analysis/book_reconstruct.py`): replays raw
+`book_events` into per-token top-of-book + depth/one-sidedness features. Validation: reconstructed
+best_bid/ask match the feed's OWN best_bid/best_ask **99.79%** (181868/182252) + EXACT match vs the 1/s
+snapshot ladders. This is the durable "L2 vision" primitive; it does NOT need new collection (raw book_events
+already capture sub-second; 3-day retention).
+
+**DISCIPLINE: tested the idea on existing data BEFORE building the persistent collector layer — and it's DEAD,
+so we did NOT build the (volume-heavy, risky) collector layer.** Two screens on 120 recent btc windows (16M
+reconstructed points), framed as recent-regime SCREENS not proof:
+- SCREEN 1 (mechanism, no fee/fill): one-sidedness IS present but WEAK — |ratio−0.5| rises with spot move
+  (0.168→0.198, corr +0.077), a side thins in fast moves (near-empty 3.5%→5.6%). Present, not flat.
+- SCREEN 2 (DECISIVE, no fee/fill — revert vs continue): when the book goes one-sided during a spike the
+  price CONTINUES, mean signed-forward-mid **+0.0396 vs +0.0048 baseline (8× stronger), only 28% revert.**
+  -> the bot steps away precisely when flow is INFORMED/toxic; providing the abandoned liquidity = adverse
+  selection = DEAD. This is a TRUSTWORTHY kill (strong, kill-direction, matches theory) even on recent data.
+
+**THEORY CONFIRMED:** the circuit-breaker is the bot DEFENDING itself against toxic flow (being smart), not
+making an exploitable mistake. The vol-spike one-sidedness is MORE informed, not less. Both legs now closed:
+taker = fee-walled, maker = adverse-selected.
+
+**WHAT'S LEFT in the L2 program:** the reconstruction primitive is reusable. The remaining un-tested L2 idea
+is INVENTORY skew = one-sidedness WITHOUT a vol spike (calm flow-accumulation the bot must unwind), which —
+unlike the toxic circuit-breaker — MIGHT revert. Prior is guarded (the earlier 1/s side-flow probe found flow
+absorbed/non-reverting, but `side` is 59% noise so the L2 depth ratio is a cleaner test). One clean screen
+next; if dead, the "trade-the-maker" program is itself walled (consistent with the MM postmortems = adverse
+selection). Persistent collector L2 layer DEFERRED until/unless an L2 idea screens positive.
