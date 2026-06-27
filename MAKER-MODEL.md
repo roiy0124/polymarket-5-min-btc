@@ -61,3 +61,37 @@ CALM windows.
 
 Scripts: `experiment_fear_maker.py` (idea #1), the σ/fair-value reverse-engineering (one-off probes — fold
 into an `analysis/maker_model.py` when we build the stack). Next deliverable: the over-round × σ-error stack.
+
+## UPDATE 2026-06-27 — VRP audit, external research, circuit-breaker (all rigor-gated/second-mind validated)
+
+**VRP / σ-error harvest — OVERFIT, mined out.** Built `experiment_vrp_harvest.py` (buy favorite when the bot
+over-charges vol = implied σ ≫ trailing realized = a Variance Risk Premium harvest, a documented 0DTE edge).
+Audit: non-stationary (works 1 of 3 time-folds), **EV-neutral vs random** (loss-rate p=0.013 but EV p=0.30 —
+the bot prices its own confidence into the ask), loss-light, same latent as over-round (20 overlapping losers).
+DEEP LESSON: **the bot self-prices its vol-confidence, so over-round/VRP/σ-error are ONE mined-out signal.**
+The genuinely different opponent is INVENTORY/DEPTH, which needs L2.
+
+**External research (workflow wf_0fbc5840, 13 agents) — we are STRICTLY AHEAD of the public frontier.** The
+two traders (Patange, BenjaminCup) never reverse-engineered the maker (no fair-value model / hardcoded σ);
+they quit from FATIGUE/optimism, not proof; two real MM operators got walled by adverse selection + queue
+opacity. Gold findings: (1) **MM vol CIRCUIT-BREAKER + hysteresis-cancel** (warproxxx/poly-maker) — freezes/
+goes one-sided ~10s on vol spikes; (2) **Chainlink settlement is PUBLIC over WS** `wss://ws-live-data.polymarket.com`
+`crypto_prices_chainlink` (dissolves the Data-Streams-auth blocker!); (3) **Polymarket `side` field is only
+~59% accurate** (arXiv 30B ticks) = why every flow/CTAP signal came out ~0 (rebuild flow from price+size
+deltas, NOT `side`); (4) inventory skew is in **DEPTH asymmetry at ±1c (`overall_ratio`)**, not the mid.
+
+**Vol circuit-breaker — TAKER leg fee-walled, MAKER leg deferred to L2** (`experiment_vol_circuit_breaker.py`,
+second-mind a12112dc). Both taker directions die to the fee (momentum −0.060, contrarian −0.087); the freeze
+is NOT visible at 1/s; BUT the 1/s up_book/down_book ladders show the footprint (favored-side depth ~halves,
+ask/bid ratio 0.98→0.90 in the spike cell). The fee-free MAKER leg (rest the abandoned-side quote) is the
+untested corner → needs the L2 build.
+
+**Inventory-skew existence probe (n=48k):** flow (via `side`) does NOT push the mid off fair-value reverting
+(coef ≈0) — but `side` is 59% noise AND inventory lives in DEPTH not mid, so the snapshot/side view is BLIND
+to it. Confirms the L2 dimension is structurally necessary.
+
+**NEXT (decided): build the L2 capture** — add depth one-sidedness (`overall_ratio`), the fair-value residual,
+and the Chainlink settlement WS as LAYERS on the existing per-coin collectors/DBs (not separate DBs). Then
+test the fee-free maker circuit-breaker + inventory-reversion on the accumulated L2 stream. See memory
+`trade-the-maker`. Bottleneck reminder: everything is loss-light (~38 favorite-tail losers) — L2 capture also
+accumulates the data we're starved on.
