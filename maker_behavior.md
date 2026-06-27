@@ -1,9 +1,53 @@
-# THE MAKER — everything we know (dossier, 2026-06-27)
+# maker_behavior — everything we know about the maker (living doc)
 
 The canonical, plain-language reference on the counterparty we trade against in the Polymarket 5-min crypto
-Up/Down markets. Every claim is tagged **[VERIFIED]** (we ran the test), **[STRONG INFERENCE]** (the data
-strongly implies it), or **[HYPOTHESIS]** (plausible, not yet pinned). Chronological findings + scripts live
-in `MAKER-MODEL.md`; this is the consolidated "what we know."
+Up/Down markets. **Keep this updated as we learn.** Every claim is tagged **[VERIFIED]** (we ran the test),
+**[STRONG INFERENCE]** (the data strongly implies it), or **[HYPOTHESIS]** (plausible, not yet pinned).
+Chronological findings + scripts live in `MAKER-MODEL.md`; this is the consolidated "what we know."
+
+---
+
+## 0. THE STRATEGIC FRAME — "me vs the maker," predict his INPUTS not his OUTPUT (thesis, 2026-06-27)
+
+The reframe that re-opens the program. Two different games, and we were stuck in the wrong one:
+
+- **OLD game ("me vs others / me vs the market"):** predict the stock's price *movement*. We tried this for a
+  whole program → WALLED. The market is efficient on knowledge.
+- **NEW game ("me vs the maker"):** there is no faceless "market." There is **one fair-value bot** setting every
+  price. So the real opponent is *that bot*. And here's the key distinction we kept missing:
+  - Everything that looks **"unbeatable / smart / tight"** is the maker's **OUTPUT** — its finished quote, which
+    is the *correct* answer to its own equation. Trying to out-predict the output = trying to out-compute a bot
+    running the right model on the same data. Hopeless.
+  - But the maker's quote is `Φ( (spot − strike) / (σ·√t) )` — a function of **INPUTS / COMPONENTS** (its
+    "body parts" / the strings it pulls). **We don't have to beat the output; we have to beat ONE input.** If we
+    estimate any single component *better than the maker does*, we compute a better fair value and we are now
+    **playing its exact game, at its level — competing, not guessing.**
+
+**The program this defines:** decompose the maker's equation into its components, and for EACH, ask
+**where / when / how much the maker gets that component wrong**, and whether *we* can do better:
+
+| component | can the maker be wrong on it? | our finding | open? |
+|---|---|---|---|
+| **time** `t` | no — deterministic, we both have it | no edge | closed |
+| **strike** | fixed at open; both observe it (but on WHICH feed? see spot) | — | tied to spot |
+| **σ** (volatility) | yes — its ONE estimated input | tested: avg σ-error is **self-priced / EV-neutral** (VRP). Maybe wrong *conditionally* (regime change before its σ updates)? | mostly closed; conditional untested |
+| **spot / settlement feed** | **YES — structurally.** The maker prices off a proxy (Binance-like) but the market **settles on Chainlink**. If it can't/doesn't use the true settlement feed in real time, its spot input is *systematically wrong* by the basis dynamics. | **the OPEN component** — we just built the Chainlink layer to measure it | **OPEN — highest priority** |
+
+**The "string hierarchy" (play as high as you can):**
+- *Level 0* — predict the OUTPUT (the quote). Walled.
+- *Level 1* — compute the fair value yourself with a **better input** than the maker (e.g. the TRUE settlement
+  feed it doesn't use). This is "playing at the maker's level."
+- *Level 2+* — predict the **drivers of the components** before the maker incorporates them (e.g. a vol-regime
+  shift before its σ catches up; a USDT/USD move before it hits the basis). Higher leverage if it exists.
+
+**The cost gate (never forget):** a better fair value only PAYS if the mispricing it reveals exceeds the
+trading cost. The taker fee is tiny at high p (the favorite) and brutal at p≈0.5. So a component-error edge
+most plausibly lives **at the favorite (cheap fee) + the settlement-basis residual** — exactly where the new
+Chainlink layer points.
+
+**First experiment of this program:** *which feed does the maker actually price off?* Fit its historical quote
+to Φ built on Binance vs Pyth (we have both); add Chainlink going forward. If it tracks a proxy but settles on
+Chainlink, that gap is a structural component-error we can trade by computing fair value on the real oracle.
 
 ---
 
