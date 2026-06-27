@@ -246,6 +246,10 @@ const NODES = [
    role:"Our trading rule: taker-cross the favorite (or maker-rest), then hold to resolution.",
    equation:"fav_ask ∈ [0.95,0.99) + gate",
    detail:"Favorite-tail base is NET-NEGATIVE (−0.0029 pooled, deflated p=1.0, 4/6 coins negative). Over-round gate lifts to +0.0065 but loss-light. Policy: taker-cross entry, maker-rest-at-target else hold-to-resolution (taker-exit is worst, fires on losers). The only OPEN execution corner = the over-round-gated / Chainlink-true-favorite entry; everything else walled."},
+  {id:"midround-exit", title:"Mid-round Exit (max-bid)", tier:6, layer:"execution", verdict:"walled",
+   role:"Sell mid-round at the highest favorite BID — value is not only hold-to-0/1.",
+   equation:"max(bid_t), t after entry",
+   detail:"The maker's 'mistake' includes the best price we could SELL at DURING the round, measured from the DB intra-round bid path (experiment_midround_exit.py). VALIDATED on favorite-tail 2026-06-28: clairvoyant peak-sell +0.0001 (barely beats hold −0.0051, ≈0) and every realizable maker-rest is WORSE (−0.006..−0.011) and adverse-selected (win|fill 0.98 vs win|nofill 0.95 — fills on the winners you'd hold to 1.0, fails on losers). A favorite's bid is capped near 1.0 so the upside is ~0.4¢; winners better HELD, losers' bids COLLAPSE before you can sell. Standing lens — matters MORE for non-favorite / mid-price entries (bigger transient swings)."},
   {id:"settlement-outcome", title:"Settlement Outcome", tier:6, layer:"outcome", verdict:"closed",
    role:"The binary resolution: Up if final Chainlink ≥ strike Chainlink.",
    equation:"1[ final_CL ≥ strike_CL ]",
@@ -292,6 +296,8 @@ const EDGES = [
   {from:"maker-rebate",      to:"entry-execution", label:"fee-free alt (adverse-selected)"},
 
   {from:"entry-execution",    to:"pnl", label:"entry price locked"},
+  {from:"order-book",         to:"midround-exit", label:"intra-round bid path"},
+  {from:"midround-exit",      to:"pnl", label:"best realizable sell"},
   {from:"settlement-outcome", to:"pnl", label:"won = 0 or 1 payout"},
 ];
 

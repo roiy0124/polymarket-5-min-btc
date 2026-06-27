@@ -244,6 +244,19 @@ through `analysis/stats.assess` (deflated cluster-bootstrap on the net-EV stream
 0); run the **second-mind** adversarial refutation; self-normalize constants per-coin (`analysis/adaptive.py`),
 never re-fit a free threshold; pre-register + LOCK params before the OOS read. A loss-light "pass" is noise.
 
+**MID-ROUND-EXIT lens (standing, user directive 2026-06-28).** An entry's value is NOT only the hold-to-resolution
+0/1 outcome (`won − entry`) — it is ALSO the **highest price we could SELL at during the same round**. Our DBs hold
+the full intra-round bid path, so for any candidate we measure both HOLD *and* the best mid-round exit
+(`experiment_midround_exit.py`): the **clairvoyant max-bid** (upper bound — perfect-hindsight taker-sell at the peak
+favorite BID, both fees) and the **realizable maker-rest** at a target. **Validated on favorite-tail (2026-06-28):**
+clairvoyant peak-sell = **+0.0001** (barely beats hold −0.0051, still ≈0) and every realizable rest is WORSE
+(−0.006..−0.011) and adverse-selected (win|fill 0.98 vs win|nofill 0.95 — it fills on the winners you'd hold to 1.0,
+fails on the losers). Reason: a favorite's bid is **capped near 1.0** so the peak-sell upside is ~0.4¢; winners are
+better HELD, losers' bids COLLAPSE before you can sell. So mid-round exit does not rescue the favorite-tail — BUT
+the lens matters MORE for **non-favorite / mid-price entries** (bigger transient swings); apply it to EVERY future
+candidate, not just hold P&L. (Consistent with the exit-execution verdict: maker-rest-at-target ELSE hold; never
+taker-exit; "selling escapes the fee" is false.)
+
 **Map of this chain:** see `maker_chain.html` (open in a browser) — the interactive, editable hierarchy of the
 whole Polymarket trading chain (what affects what; height = how upstream/causal; click a node for its role +
 equation + our verdict). Edit the `NODES`/`EDGES` block at the top of that file to revise it.
