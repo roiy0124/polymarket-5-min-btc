@@ -193,7 +193,7 @@ component's *driver* before the maker incorporates it.
 | strike | — (frozen at open; = a spot read) | — | tied to the spot feed |
 | σ — *average* | trade implied-vs-realized gap | — | **walled** (VRP, self-priced, EV-neutral) |
 | σ — *conditional* | catch the moment its σ lags a regime shift, before it re-quotes | tested 2026-06-27 | **Thread A — CLOSED / DEAD** (priced latency-lag + loss-starved; see below) |
-| spot / settlement feed | compute fair value on the TRUE Chainlink oracle vs its Binance quote | **NO — needs forward Chainlink** | **Thread B — OPEN, highest priority** |
+| spot / settlement feed | compute fair value on the TRUE Chainlink oracle vs its Binance quote | **harness BUILT; verdict needs forward Chainlink** | **Thread B — OPEN (the only one), data-gated** |
 
 **Thread A — conditional-σ error. DONE 2026-06-27 → DEAD** (`dead_ends/experiment_sigma_lag.py` + `_probe.py`;
 POSTMORTEM §1c). Built the causal realized-vol vs implied-σ divergence detector and conditioned favorite-tail
@@ -220,13 +220,21 @@ ask-rise "mechanical." **The σ component is now FULLY closed** (avg = self-pric
 latency-lag; conditional-high / roll-off = priced VRP + confound + exit-walled). The live program reduces to
 **Thread B (settlement feed), data-gated.**
 
-**Thread B — settlement-feed component (data-gated; the reason we added the Chainlink layer).** Step 1 DONE:
-the maker prices off **Binance** (R²=0.75 vs Pyth 0.0007) but the market settles on **Chainlink**. The decisive
-test: rebuild the maker's fair value on the **Chainlink** oracle and compare to its **Binance** quote; in the
-windows where they diverge — concentrated **near-strike** (a few bps flips Up↔Down) and at the **favorite**
-(fee ~0.2%, not 3.5%) — is the Chainlink-true outcome mispriced by the Binance-based quote *enough to beat the
-fee*? The constant ~16 bps USDT/USD basis **cancels**; the edge is only in the **residual** (USDT moving
-intra-window / near-strike flips). Needs ~weeks of forward Chainlink data (collection started 2026-06-27).
+**Thread B — settlement-feed component (the ONLY open thread; HARNESS BUILT 2026-06-27, verdict data-gated).**
+Step 1 DONE: the maker prices off **Binance** (R²=0.75 vs Pyth 0.0007) but the market settles on **Chainlink**.
+**Harness BUILT + structurally validated: `experiment_settlement_basis.py`** (independent-review-hardened: strict
+newest-before-decision causal pickers, near-strike gate scaled by causal remaining-move vol, mid dead-bands,
+flip-label diagnostic, LOCKED pre-registration). What it confirms on the first ~131 Chainlink-stamped windows:
+(1) Chainlink IS the settlement source (`final_cl≥strike_cl` matches official resolved **96.9%** vs Binance 94.7%);
+(2) realized **basis-flip rate ~5.3%** (binance-favorite settles the other way on Chainlink) — and in those flips
+resolved matched the Chainlink side **5/7**, the Binance side **2/7**, i.e. our captured final-Chainlink tick has
+boundary timing-noise, so the LABEL is noisiest exactly where the edge must pay (a real caveat). The trade =
+buy the Chainlink-implied side in **near-strike divergence** windows; NOTE it is the maker's **underdog** (ask
+~0.35–0.55, fee ~3–4.5%), so it needs a high flip-hit-rate — hence the near-strike gate is essential.
+**DATA-GATED:** only ~3 near-strike divergence trades so far → INSUFFICIENT by construction. *Do NOT forget this
+thread* — it is the one structurally-open edge; re-run the harness as forward Chainlink accrues (months). The
+LOCKED pre-registration + the pre-committed **KILL** (if resolved tracks Chainlink ≤ Binance in flips, or the
+selected subset's net-EV CI includes 0 at n_loss≥30) live in the experiment file + memory `settlement-basis-wall`.
 
 **Parked candidate that rides alongside:** the **over-round gate** (§4) — re-gate on fresh data once it has
 **≥30 losers**; cleaning favorite-selection with the Chainlink oracle (Thread B step 3) may de-noise it.
