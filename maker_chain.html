@@ -211,7 +211,7 @@ const NODES = [
   {id:"maker-fair-value", title:"Maker Fair-Value Engine", tier:3, layer:"engine", verdict:"closed",
    role:"Digital-option pricing model — the maker's OUTPUT we cannot out-predict.",
    equation:"up_mid = Φ( ln(S/K)/(σ·√t) ),  R²=0.91",
-   detail:"One synthetic-book bot per coin (Up/Down books are exact mirrors 75–81% of snapshots). Fits a Black-Scholes digital option at R²=0.91 (BTC/ETH/DOGE). This is the OUTPUT: it runs the right model on the same data we have, so directional/prediction strategies are walled by construction. Attack its INPUTS, never its output."},
+   detail:"One synthetic-book bot per coin (Up/Down books are exact mirrors 75–81% of snapshots). Fits a Black-Scholes digital option at R²=0.91 (BTC/ETH/DOGE). This is the OUTPUT: it runs the right model on the same data we have, so directional/prediction strategies are walled by construction. Attack its INPUTS, never its output. Reconfirmed 2026-06-28: a principled drift-augmented FUTURE-value model (Φ with a near-trend drift term) adds NOTHING beyond this quote (drift coef collapses given the mid, corr with residual ~0, robust across a tl×window grid) — the maker already prices the near-trend, so its up_mid IS the best free real-time near-trend oracle → export it (Outcome 2), don't out-predict it."},
   {id:"over-round", title:"Over-Round (Spread)", tier:3, layer:"engine", verdict:"open",
    role:"The maker's revealed confidence — its risk-overlay spread.",
    equation:"u_ask + d_ask − 1  (~1–2%)",
