@@ -206,8 +206,19 @@ nothing beyond raw |move|. **(2)** Loss-starved: the favorite-tail pool has only
 filter starves below n_loss=30 and can't stack with over-round (Jaccard 0.58, cuts the same losers). **Durable
 meta-lesson:** *every loser-cutting filter on the favorite-tail base is INSUFFICIENT by construction until the
 loser pool grows past ~90-100 (months more data)* — this is why over-round can't graduate either; stop testing
-filters of this shape on favorite-tail. **The σ component is now fully closed** (avg = self-priced VRP;
-conditional = priced latency-lag). The live program reduces to **Thread B (settlement feed), data-gated.**
+filters of this shape on favorite-tail.
+
+**Thread A-prime — mechanical σ roll-off, also DONE → DEAD** (`dead_ends/experiment_sigma_rolloff.py`). The one
+"predict the maker's string" corner that is *not* the latency-lag: predict its NON-informational σ update (a vol
+spike aging out of its trailing window → it re-rates the favorite up) and pre-position. DEAD both ways: (A) hold
+= the priced VRP **level** (over_charge coef ≈ 0); (B) the "+1.73% mechanical re-rate" is **~81% an outcome-mix
+(Simpson) confound** (`corr(dask, won)=+0.65`; winners-only it collapses to +0.003), the genuine won-orthogonal
+piece is **~0.1¢/σ** (sub-economic) AND uncapturable (the re-rate is on the ASK, you exit at the BID; every
+round-trip < spread, clairvoyant exit still −0.0027). **Reusable guard:** the favorite ask-change here is
+outcome-dominated (corr 0.65) → always control for `won` / measure within-winners before calling a tl-window
+ask-rise "mechanical." **The σ component is now FULLY closed** (avg = self-priced VRP; conditional-low = priced
+latency-lag; conditional-high / roll-off = priced VRP + confound + exit-walled). The live program reduces to
+**Thread B (settlement feed), data-gated.**
 
 **Thread B — settlement-feed component (data-gated; the reason we added the Chainlink layer).** Step 1 DONE:
 the maker prices off **Binance** (R²=0.75 vs Pyth 0.0007) but the market settles on **Chainlink**. The decisive

@@ -99,6 +99,22 @@ A 3-angle independent second-mind **killed it on two grounds:**
    base is INSUFFICIENT by construction until the loser pool grows past ~90–100 (months more data).* This is
    why over-round can't graduate either — stop testing filters of this shape on favorite-tail. Thread A CLOSED.
 
+**Thread A-prime — mechanical σ roll-off (`dead_ends/experiment_sigma_rolloff.py`), 2026-06-27.** The one
+"predict the maker's strings" corner that is *not* the latency-lag: predict the maker's NON-informational σ
+update — a vol spike AGING OUT of its trailing window makes it mechanically re-rate the favorite up — and
+pre-position before it re-quotes. **DEAD both ways, and the "mechanism" itself was mostly a confound.** (A)
+Hold-to-resolution = the priced VRP **level** (`won ~ ask + over_charge` coef ≈ 0, perm-p 0.85; aging adds
+nothing). (B) The headline "+1.73% mechanical re-rate" (favorite ask rises more in aging windows tl30→tl10) is
+**~81% an outcome-mix (Simpson) artifact**: the ask-change is outcome-dominated (`corr(dask, won) = +0.65` —
+winners' asks march to 1, losers' to 0), so any won-correlated regressor inherits a spurious excess;
+**winners-only it collapses to +0.003** (CI spans 0) and aging carries no outcome info beyond ask (corr −0.055).
+The genuine won-orthogonal piece is **~0.1¢/σ** — real but sub-economic — *and* uncapturable: the re-rate lives
+on the **ask**, you exit at the **bid** (which doesn't follow), so every round-trip is negative at every exit
+(clairvoyant best-exit still −0.0027/$1) and maker-rest-sell is adverse-selected (fills 99%-winners). **Reusable
+guard:** in this product the favorite ask-change is outcome-dominated (corr 0.65) → *always control for `won` /
+measure within-winners before reading any tl-window ask-rise as "mechanical".* This closes the "predict the
+maker's σ string" corner entirely; only **Thread B (settlement feed), data-gated**, remains open.
+
 ## 2. Why — the walls, reframed against theory
 
 - **Efficiency = Grossman-Stiglitz.** The token already prices recent knowledge (residual ≈ 0). We were
