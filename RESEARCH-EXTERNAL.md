@@ -1,0 +1,58 @@
+# RESEARCH-EXTERNAL.md — literature / others'-approaches research log
+
+Deep, adversarially-verified web research on what OTHERS do to exploit oracle-settled short-dated binary /
+prediction markets, run topic-by-topic (each via the deep-research workflow: fan-out search → fetch → 3-vote
+adversarial verify → synthesize). This is DISTINCT from our own experiments (those live in `EXPERIMENTS.md` /
+`POSTMORTEM.md`). Every conclusion here is gated against our own walls before belief. Verdicts are honest.
+
+---
+
+## Topic 1 — Term-structure / nested-market arbitrage & cross-market consistency (2026-06-28)
+
+**Question:** do Polymarket's nested crypto Up/Down durations (5m ⊂ 15m ⊂ hourly) price consistently under
+no-arbitrage; is there a term-structure / calendar / vol-term-structure edge a retail quant could exploit?
+
+**Verdict: NO clean new taker edge.** 104 agents, 25 claims verified, 15 killed. The one genuinely-new angle
+(vol-term-structure richness) collides with our already-walled maker-adverse-selection corner.
+
+### Verified findings (survived 3-vote adversarial verification)
+1. **No static nested-arbitrage.** "Up over the hour" (`final_60 ≥ strike_0`) is NOT the product of per-window
+   ups — path-dependence + each sub-window has a DIFFERENT strike (the prior close). The only rigorous no-arb
+   object is the **subset inequality** (a narrower event prices ≤ a broader one), verified on Polymarket NBA
+   markets (arXiv 2605.00864): real but **tiny (~101bp median), fleeting (median 16s), capacity-bounded
+   (~$15/episode)** — and it does NOT cleanly transfer to time-nested crypto windows (different strikes).
+2. **Vol-term-structure / VRP (the one NEW angle):** short-dated options/0DTE carry a structurally **negative
+   variance risk premium** and are systematically **rich (~0.75–1.0 vol pts)** (Carr-Wu 2009; Verdad; CBS 0DTE
+   study). BUT the edge accrues to the **SELLER of short-dated vol = a fee-free MAKER**, not a taker. The
+   tradeable short-straddle extension (Verdad's +Sharpe 0.85–1.4) was **REFUTED (0-3)** → richness is a PRIOR,
+   not a proven net edge.
+3. **Implied vol from a 5-min quote is jump-contaminated** — the intraday-jump risk premium is ~2× the combined
+   diffusion+vol premia (Bozovic 2025, SPXW 0DTE) → a naive constant-/diffusion-vol cross-duration no-arb check
+   is structurally unsound.
+4. **Calibration is horizon-dependent & transitory:** efficient near open AND near expiry, biased only at
+   INTERMEDIATE horizons (Berg-Rietz 2019). In a 5-min market the whole life is near-expiry → the bias window
+   may never open. (The competing "crypto perfectly calibrated at short horizons" AND "overconfidence to fade"
+   claims were BOTH refuted — assume neither direction.)
+5. **Fee model VERIFIED:** docs `fee = 0.07·p·(1−p)` per SHARE = `0.07·(1−p)` per STAKE = exactly `net_ev.py`.
+   Symmetric, peaks ~1.75%/shares at p=0.5, ~0.33% at p=0.95. **Our accounting is correct.** Caveat: the
+   schedule changed ~Jan–Apr 2026 → re-verify `feeds.fetch_fee_schedule` live before any build.
+6. **Multiple durations DO coexist** (5m, 15m confirmed; hourly/daily not corroborated). Testing nesting would
+   require ALSO collecting the 15m+ books — we only collect 5m today.
+
+### Refuted (do NOT rely on these)
+- The Polymarket-vs-Binance-option cross-venue gap (arXiv 2606.19517: "5.6pp persistent, AR(1) 4h half-life,
+  delta-hedged arb profitable") — **refuted 0-3** on the persistence/tradeability. (Pre-empties the obvious
+  cross-venue version of Topic 4.)
+- Dutch-book "YES prices sum to 1" / combinatorial no-arb as DIRECTLY transferable to time-nested windows — refuted.
+- Short-0DTE-straddle as a documented +Sharpe strategy — refuted.
+
+### My critical synthesis (gated against our walls)
+The vol-richness finding is **consistent with what we already measured** — the maker IS the vol seller earning
+the VRP (it pads σ ~15%). The literature confirms the premium accrues to the *seller/maker*, which on Polymarket
+is the adverse-selected corner we walled (maker-in-noise −0.365). So Topic 1 does **not** open a new taker door;
+the only source-motivated harness (back out cross-duration implied vol, test a fee-free maker vol-seller net of
+adverse selection) needs **new 15m/hourly collection** AND must beat the maker-adverse-selection wall = **low
+prior, large build.** Nesting-arb is structurally weak/fleeting/capacity-bounded.
+
+**Actionable:** (a) fee model confirmed correct — no code change; (b) cross-venue-gap refuted — reshape Topic 4;
+(c) park the vol-term-structure-maker idea as LOW-priority (needs 15m collection + collides with maker wall).
