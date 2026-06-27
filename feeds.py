@@ -25,6 +25,7 @@ import coins
 
 GAMMA_EVENTS = "https://gamma-api.polymarket.com/events"
 CLOB_BOOK = "https://clob.polymarket.com/book"
+CLOB_MARKETS = "https://clob.polymarket.com/markets"
 BINANCE_PRICE = "https://api.binance.com/api/v3/ticker/price?symbol={}"
 PYTH_LATEST = "https://hermes.pyth.network/v2/updates/price/latest"
 PYTH_BTC_ID = "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43"
@@ -114,6 +115,34 @@ def fetch_fee_schedule(window_start=None, coin="btc", timeout=DEFAULT_TIMEOUT):
         "takerOnly": sched.get("takerOnly"),
         "rebateRate": sched.get("rebateRate"),
         "exponent": sched.get("exponent"),
+    }
+
+
+def fetch_rewards(window_start=None, coin="btc", timeout=DEFAULT_TIMEOUT):
+    """Verify the LIVE liquidity-rewards config for a 5-min market from the CLOB.
+
+    Checked 2026-06-28 (external-research Topic 3 / memory maker-rewards-lead): the 5-min crypto Up/Down
+    markets carry the reward CONFIG fields (`min_size`=50, `max_spread`=4.5c) but `rates` is **None** on ALL
+    six coins -> the liquidity-rewards pool is NOT funded on this product (control: funded event markets show
+    `rates=[{rewards_daily_rate: N}]`). So the maker-rewards subsidy that could offset adverse selection does
+    NOT exist here. This helper makes the kill RE-CHECKABLE in one call: if `funded` ever flips True, re-open
+    the maker-rewards lead (feasibility = best-case daily reward per $ resting vs measured adverse selection).
+    Returns {slug, condition_id, rates, min_size, max_spread, funded} or None."""
+    if window_start is None:
+        import time
+        window_start = int(time.time() // 300 * 300)
+    m = fetch_market(window_start, coin, timeout=timeout)
+    if not m or not m.get("condition_id"):
+        return None
+    data = _get_json(f"{CLOB_MARKETS}/{m['condition_id']}", timeout=timeout)
+    rw = (data or {}).get("rewards") or {}
+    return {
+        "slug": m.get("slug"),
+        "condition_id": m.get("condition_id"),
+        "rates": rw.get("rates"),
+        "min_size": rw.get("min_size"),
+        "max_spread": rw.get("max_spread"),
+        "funded": bool(rw.get("rates")),    # None/[] => unfunded => no maker-rewards subsidy on this market
     }
 
 

@@ -147,8 +147,25 @@ maker-rewards flip the adverse-selected maker to net-positive on the 5-min book?
 gap and whale/large-flow lead — was refuted here AND in Topic 1; the latency-taker version is our already-walled
 edge. A literal Topic 4 would be redundant.
 
-### Decision
-The sweep's net: exactly ONE untested, on-topic lead = **maker-rewards-subsidy vs adverse selection on the 5-min
-book.** Next step (executing "test ideas until a solid edge"): pull the live `rewardsConfig`, then a feasibility
-harness — BEST-CASE daily reward per $ resting (from the formula + pool) vs our MEASURED adverse-selection cost.
-Kill if best-case reward < adverse-selection cost; else it's a (live-fills-gated) candidate.
+### Decision → the lead is DEAD: the 5-min crypto markets are NOT in the rewards program (verified live)
+Before building a feasibility harness I pulled the live `rewardsConfig` from the CLOB. **Decisive kill in one
+API call:** for ALL SIX coins' 5-min markets, `rewards.rates = None` — the reward config fields exist as defaults
+(`min_size=50`, `max_spread=4.5¢`) but **no daily reward pool is funded.** Control (our reader is correct): other,
+funded markets show `rates=[{rewards_daily_rate: 2..3}]` (e.g. "Extended FDV above $3B" pays $3/day) — so the
+`None` is real, not a parse error. **There is no maker-rewards subsidy to harvest on the 5-min crypto Up/Down
+product**, so the one promising lead from the whole sweep dies on a single fact (no funded pool) — no harness
+needed. (Even the funded markets pay only $2–3/day over a shared pool; and `volume24hrClob ≈ $849`, `holdingRewardsEnabled=False`.)
+Added `feeds.fetch_rewards(window_start, coin)` so this is RE-CHECKABLE in one call — **re-open the lead only if
+`funded` ever flips True.**
+
+---
+
+## Sweep verdict (Topics 1–4)
+Four planned topics; Topic 4 (cross-venue/derivatives) was **pre-answered** (cross-venue gap refuted in 1 & 3,
+whale-flow refuted, latency-taker already walled). Net result of the external research: **no new exploitable edge
+for this product.** The literature *confirms* our own walls (efficient-on-knowledge; fee = price of the edge; the
+maker is the vol-seller earning the VRP; makers-win-takers-lose is concentrated in pros on long-dated event
+markets) and the one genuinely-new, on-topic lead (maker-rewards subsidy) is **unfunded on the 5-min crypto
+markets**. The single open thread remains **Thread B (settlement feed), data-gated** — and the research *validated*
+its premise and *sharpened* its encoding without producing a verdict. Durable artifacts added: `feeds.fetch_rewards`
+(rewards authority, mirrors `fetch_fee_schedule`), and the verified fee-model reconciliation (our `net_ev` is correct).
