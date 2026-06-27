@@ -169,3 +169,151 @@ markets) and the one genuinely-new, on-topic lead (maker-rewards subsidy) is **u
 markets**. The single open thread remains **Thread B (settlement feed), data-gated** — and the research *validated*
 its premise and *sharpened* its encoding without producing a verdict. Durable artifacts added: `feeds.fetch_rewards`
 (rewards authority, mirrors `fetch_fee_schedule`), and the verified fee-model reconciliation (our `net_ev` is correct).
+
+---
+
+# PHASE 1 — Field briefs (the field-by-field program; see `RESEARCH-PLAN-FIELDS.md`) — 2026-06-28
+
+Each "string" of the maker's formula `up_mid = Φ(ln(spot/strike)/(σ√t))` belongs to a broad academic/practitioner
+FIELD. Phase 1 deep-researched all seven (8-agent workflow, 7 field-research agents + 1 synthesis/critic, ~597k
+tokens, 161 web tool-calls). **Terrain only — no trading claims.** Verdict (bottom): the survey surfaced **NO new
+wall-breaking angle**; it reconfirms the wall with explicit academic mechanism and sharpens the **two** seams we
+already had (skew model-form = TESTABLE; settlement basis = DATA-GATED). Full agent JSON archived in the session
+task output `w8m9x585b`.
+
+### Field A — Option-pricing theory & probability (the `Φ` / digital FORM) ★ owns the live seam
+- **Core object:** a cash-or-nothing digital = the discounted risk-neutral CDF `e^{−rT}·N(d2)` — a PURE BET on the
+  risk-neutral CDF at the strike. Our maker's `Φ(ln(spot/strike)/(σ√t))` is exactly this with r=0 and a single σ:
+  the flat-vol, driftless, **symmetric** special case → encodes **zero skew** by construction.
+- **The seam equation (load-bearing):** a digital is the strike-derivative of a call, so with a vol smile the true
+  price is `D = N(d2)_flatvol − vega·(dσ/dK)`. A symmetric Φ **omits the `−vega·dσ/dK` skew term**. Sign rule:
+  negative skew (`dσ/dK<0`) **raises** the digital-call (Up under-priced); positive skew lowers it.
+- **Why it's largest at 5 min:** rough-vol (Gatheral, H≈0.1) gives ATM skew `ψ(τ) ∝ τ^{H−1/2} ≈ τ^{−0.4}` — the
+  skew term is near its **maximum** at our ultra-short tenor; diffusive models can't generate it. Binary gamma ∝ 1/τ
+  and vega flips sign at the strike → the at-the-money near-expiry digital is the single most skew-sensitive object.
+- **Measurement instrument:** Breeden-Litzenberger (RND = `e^{rT}∂²C/∂K²`, model-free) / the Deribit 25Δ
+  risk-reversal is the market's direct price of the skew the maker omits. Caveat: Deribit's shortest tenor ≫ 5 min →
+  extrapolating the skew term-structure down to 5 min is itself a research risk.
+- **Seam tag:** the conditional-skew model-form residual = **TESTABLE now** (the one new lead). Caveat from crypto
+  evidence: the **sign flips by regime** (crypto *inverse* leverage effect — up-moves can be the violent tail), so a
+  causal, real-time, per-coin skew-sign proxy is the make-or-break unknown.
+
+### Field F — Market-making theory & adverse selection (spread / over-round / inventory)
+- **Core object:** a maker sets quotes around unobserved fair value; the spread decomposes into order-processing +
+  inventory + adverse-selection. Glosten-Milgrom: the spread IS the adverse-selection tax (the theoretical floor
+  under our 2-4¢ spread). Kyle's λ: price = fair + λ·orderflow. Avellaneda-Stoikov: reservation price
+  `r = s − q·γ·σ²·(T−t)` skews quotes off-mid with inventory `q`, and that skew **collapses as t→T**.
+- **Seam:** **over-round asymmetry** (`up_ask+down_ask−1` and up/down ask-vs-mid asymmetry) is the maker's
+  *revealed* pricing of asymmetric risk — the most theoretically-motivated maker observable we have, and the
+  closest built instrument to the skew seam (`experiment_overround_gate.py`, passed joint-control, loss-light).
+- **Reverse favorite-longshot on surprise:** a symmetric quote engine cannot load extra margin onto the tail that
+  *just became more likely* from a one-sided move — the F-framing of the same skew residual.
+- **Seam tag:** over-round = **TESTABLE** but only as a *conditioning feature/joint-control on the skew candidate*
+  (standalone it walks into the G-M spread = the maker's tax; already INSUFFICIENT/fee-capped). Measure loser-Jaccard
+  before believing any stack (additivity lesson). Inventory-drift & stale-quote pick-off = WALLED (HFT/self-priced).
+
+### Field B — Volatility modeling & forecasting (the `σ` input) ★ companion to A
+- **Core object:** the conditional return distribution's 2nd moment. VRP (implied>realized; BTC ~14% vs S&P ~2%) —
+  the premium accrues to the vol *seller* = the fee-free adverse-selected maker. HAR-RV (Corsi) = the SOTA σ
+  benchmark; rough vol (H≈0.1) = log-vol rougher than Brownian → fast mean-reversion + the τ^{H−1/2} skew explosion.
+- **The single most relevant fact to the skew thread:** the **crypto INVERSE leverage effect** — EGARCH on BTC shows
+  positive returns raise vol more (FOMO); the sign flipped ~2016 and is regime-unstable. So the maker's 3rd-moment
+  error is **not a fixed sign** in crypto; it can be POSITIVE skew in risk-on. Sign must be measured per regime.
+- **Seam tags:** conditional-skew = **TESTABLE** (B supplies the magnitude + sign model for A). Calendar/seasonality
+  stale-σ = **DEAD** (σ-lag in clock clothing + the OOS-death re-fit trap). Jump/tail under-weighting = **DEAD** as a
+  buy signal (it adds the −100% loss tail → a risk-CONFOUND that already sank favorite-tail, not an edge).
+
+### Field D — Option time-decay & the short-dated / 0DTE regime (the `t` input)
+- **Core object:** Greeks as t→0. A digital → a 0/1 step at the strike; delta→∞, gamma concentrates into a narrowing
+  spike on the strike. Confirms the maker's Φ(d) is the **correct** 0DTE-digital form in t — the seam is *skew*, not
+  the t-limit. Theta/gamma accelerate 4-5×/10× into expiry.
+- **0DTE pinning (Dim-Eraker-Vilkov; Ni-Pearson-Poteshman):** dealer-gamma drives strike pinning — **but it requires
+  a dealer delta-hedging the UNDERLYING**, which our cash-settled binary has none of → pinning does NOT mechanically
+  transfer. Only an *exogenous* spot-pin near a big BTC option strike could matter (a spot-distribution-shape test).
+- **Banging-the-close (Onur-Reiffen):** single-instant settlements invite closing-window trades; averaged windows
+  (Deribit 30-min TWAP, VIX SET) are manipulation-resistant. Our **single-instant Chainlink-median settle is the
+  vulnerable end** — but for retail this is the basis question (Thread B), amplified by D in the final seconds.
+- **Beckmeyer:** long 0DTE loses ~4.7%, ~60% of retail loss = transaction cost; the winner is the theta/spread
+  harvesting MAKER — the same walled-maker/taxed-taker picture. **Seam tags:** pinning, time-of-day, spread-dominance
+  all **DEAD** (no dealer hedge / re-fit trap / confirmatory). D's only contribution = a τ-amplification bucket for A.
+
+### Field E — Oracle design & settlement mechanics (settlement → outcome) ★ Thread B
+- **Core object:** Chainlink settlement = a **median-of-medians** across all CEX/DEX venues (NOT Binance). Polymarket
+  crypto resolves via Data **Streams** (sub-second PULL oracle) + Automation, `final ≥ strike → Up`, ties→Up —
+  **not** the slow 0.5%/heartbeat push FEED (a common retail confusion that kills the naive "front-run the stale
+  oracle" idea). No UMA dispute surface (that's for subjective markets). OEV ($500M+) lives in push-feed liquidations,
+  not pull-settled binaries → no retail front-run.
+- **The concrete unlock:** Polymarket's public **RTDS socket streams BOTH `binance` and `chainlink` values**,
+  sub-second, no auth — the path to observe the *true settlement oracle* directly (`coins.chainlink_pair()` already
+  names it). Converts Thread B from "can't see the label" to a pure numeric-basis question once logged.
+- **USDT/USD depeg** is an independent additive to the basis (sub-bp in calm, magnitude-5 in stress).
+- **Seam tag:** settlement-as-attack = **WALLED** (deterministic pull oracle, no UMA/OEV/front-run); the numeric
+  Binance/Pyth-vs-Chainlink **basis = DATA-GATED** (settlement-LAG framing already killed: basis ~2.8% > ~1.2%
+  tolerance, deflated p=0.89; only the near-strike-gated residual remains, needs months of flips).
+
+### Field G — Prediction-market efficiency & betting economics (binary payoff + fee) ★ the sign-critic
+- **Core object:** is `P∈[0,1]` a calibrated probability? Grossman-Stiglitz: perfect efficiency is impossible, the
+  residual must just cover the marginal sophisticate's cost — **in a fee'd market the fee IS that cost.** An edge
+  larger than the fee wedge is the anomaly to hunt; an edge at/below it is exactly what theory predicts.
+- **Favorite-longshot bias (the SIGN objection):** longshots over-priced, favorites under-priced. Kalshi
+  (300k contracts, Burgi-Deng-Whelan 2026): **takers lose ~32%, makers ~10%**; fees hit longshots hardest; the ONLY
+  after-fee-positive cell is high-price FAVORITES (= our favorite-tail family, which we found pooled NET-NEGATIVE at
+  5 min). **Critically: standard FLB makes the cheap UNDERDOG OVER-priced — the OPPOSITE of "underdog-Down
+  under-priced."** So the skew seam is only live in genuine negative-skew regimes that *reverse* the usual FLB sign.
+- **Calibration is BEST at the shortest horizon** (5 min) — the regime hardest to beat. Kelly/-100% geometry +
+  Deflated-Sharpe/purged-CV (already our `analysis/stats.py`) = the methodology layer every candidate must clear.
+- **Seam tags:** favorite-cell, maker-asymmetry, cross-venue-wedge all **DEAD/walled** for our 5-min product; G's
+  real role = the **adversary** (its FLB result is the strongest reason to doubt the skew sign).
+
+### Field C — Market microstructure & price discovery (spot/strike formation) — wall-confirming refresher
+- **Core object:** how order flow forms price. OFI ~ linear in mid-move (Cont-Kukanov-Stoikov), horizon sub-second
+  to ~10s; crypto study: imbalance-return corr ~0.20 @10s, **expected return <10bps vs ~20bps fee → fee-capped**
+  (mirrors our market exactly). Crypto lead-lag is **sub-second** (CME→Binance ~55ms) → fresher-feed = HFT-only.
+  Budish-Cramton: even *public* info creates a **speed rent** in a continuous book, won by the fastest → 1s-polling
+  retail structurally loses every race (the theoretical backbone of our wall).
+- **Cross-coin double-kill:** Capponi-Cont — genuine cross-impact adds **<1%** of explained variance over own-OFI +
+  common factor; Epps effect — high-freq cross-corr → 0 (any slow-sampled corr is already in the slow quote). Both
+  independently match our **B-risk-filter falsification** (alt's own 15s move gates strictly better than BTC's).
+- **Seam tags:** OFI, lead-lag, cross-coin OFI, microprice — **all DEAD/WALLED** (sub-second/HFT or fee-capped). No
+  overlooked door; the only adjacent live thread (settlement-source divergence) belongs to Field E, not fast C.
+
+### Phase-1 synthesis — cross-field map, candidate ranking, verdict
+**Cross-field joins that matter:**
+- **A⊗B (the core seam):** the `−vega·dσ/dK` term A says Φ omits IS a property of B's vol *surface*; B supplies WHY
+  a short-dated skew must exist (rough-vol τ^{−0.4}, maximal at 5 min) and WHICH WAY (inverse-leverage → regime-
+  flipping). These fuse into one candidate = the conditional-skew residual. The single most load-bearing connection.
+- **A⊗G (sign CONFLICT to resolve before testing):** A/B say negative-skew under-prices the digital-call; G's FLB
+  says the cheap underdog is over-priced. They **disagree on sign** → the seam is a narrow regime-conditional bet
+  against a strong null, not a standing edge.
+- **E⊗B⊗D (Thread B stack):** basis-flip prob scales with short-horizon σ (B) and is largest in the final seconds
+  (D's gamma∝1/τ) → near-strike + near-expiry + high-vol, exactly the gate already coded in `experiment_settlement_basis.py`.
+- **F⊗A⊗G:** over-round = the maker's revealed skew/risk loading = the best built conditioning instrument for A.
+- **C⊗E:** the basis is the cross-venue residual that single-venue (walled) lead-lag misses.
+
+**Phase-2 candidate ledger (pre-ranked vs our walls):**
+
+| candidate | field | tag | why |
+|---|---|---|---|
+| **Conditional-skew model-form residual** (`won−up_mid` vs causal trailing-skew proxy) | A⊗B | **TESTABLE** | NOVEL — a 3rd-moment error a symmetric Φ provably can't reach; orthogonal to every wall (1st-moment/σ-lag/HFT). Not yet built. LOW prior (σ-padding absorbs symmetric tails; fee brutal at p≈0.3-0.5; sign regime-flips). |
+| **Settlement basis, near-strike gated** (RTDS chainlink) | E | **DATA-GATED** | = Thread B, built & pre-registered; Chainlink only logging since 2026-06-27 → INSUFFICIENT by construction; needs months. |
+| **Over-round asymmetry as conditioner** | F | **TESTABLE** | only as a non-redundant gate/feature on the skew candidate (measure Jaccard); standalone = G-M spread = walled. |
+| Tail/fat-tail OTM mispricing | A/B | DEAD | the absorbable (symmetric) half; cuts *against* favorite-buy = risk-confound. |
+| Near-expiry instability harvest | A/D | DEAD | sub-second/HFT in time-decay clothing; demote to a τ-bucket for the skew test. |
+| Calendar/time-of-day stale σ | B/D | DEAD | σ-lag + the re-fit-to-recent-data OOS-death trap. |
+| Cross-venue LOOP wedge (4h half-life) | G | DEAD | hourly horizon, not our 5-min window; needs option/Chainlink leg. |
+| Selective maker-in-noise | F/G | DEAD | already killed (−0.365 adverse selection); 5-min markets unfunded. |
+| OEV settlement front-run | E/C | DEAD | pull-oracle + deterministic resolution closes the window; HFT-only. |
+| Cross-coin OFI lead-lag (BTC→alt) | C/B | DEAD | Capponi-Cont <1% + Epps + our own B-filter falsification. |
+
+**Field priority for Phase 2:** **A** (the only new on-data candidate) → **B** (supplies A's magnitude+sign model) →
+**E** (Thread B, real but a waiting game) → **F** (the conditioning instrument/rigor wrapper for A) → **G** (the
+sign-critic + the deflation gate) → **D** (confirmatory, a τ-bucket) → **C** (most walled, no new door).
+
+**Honest bottom line:** the broad-field survey produced **no new edge**. It converts "the wall *feels* structural"
+into "the wall *is* structural, for documented reasons," kills 8 of 10 seams with explicit mechanism, and leaves
+exactly the two we already had. Its real value is three things: (a) it gives the skew candidate its rigorous form
+(`won−up_mid` vs a causal trailing-skew proxy, joint-controlled against mid AND trend); (b) it raises the serious
+FLB **sign objection** (the skew seam only lives in regime-reversed negative-skew windows; crypto's inverse-leverage
+makes that sign unstable = the make-or-break risk); (c) Field B gives the τ^{−0.4} reason the skew term is maximal at
+5 min = the strongest argument the seam is non-trivial. **Next:** ONE honest Phase-2 build of the skew residual (low
+prior, expect priced-by-σ-padding or fee-capped), Thread B stays the patient data-gated bet.
