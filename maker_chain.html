@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polymarket 5-min trading chain — what affects what</title>
+<style>
+  :root{
+    --bg:#0c0f16; --panel:#141926; --panel2:#1b2233; --ink:#e8edf7; --mut:#8b97ad;
+    --line:#3a455e; --edge:#46506b; --edge-hl:#8fa9ff;
+    --exogenous:#7a8699; --observed:#3d8bfd; --closed:#6b7488; --walled:#ef5350; --open:#2ecc71;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;overflow:hidden}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column}
+
+  header{display:flex;align-items:center;gap:14px;padding:9px 16px;background:linear-gradient(#161c2b,#10141f);
+    border-bottom:1px solid var(--line);z-index:30}
+  header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.2px}
+  header .sub{font-size:11px;color:var(--mut)}
+  header .spacer{flex:1}
+  .btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:6px 11px;font-size:12px;cursor:pointer;transition:.12s}
+  .btn:hover{background:#26304a;border-color:#4a587a}
+
+  #stage{position:relative;flex:1;overflow:hidden;cursor:grab;
+    background:
+      radial-gradient(circle at 1px 1px, #1a2030 1px, transparent 0) 0 0/26px 26px,
+      var(--bg)}
+  #stage.panning{cursor:grabbing}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  #edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+
+  /* tier bands */
+  .band{position:absolute;left:0;border-top:1px dashed #232c40}
+  .band .lbl{position:absolute;left:10px;top:6px;font-size:10.5px;letter-spacing:.4px;
+    color:#566179;text-transform:uppercase;font-weight:600;white-space:nowrap}
+  .band .hint{position:absolute;right:14px;top:6px;font-size:10px;color:#3f4860;font-style:italic}
+
+  /* nodes */
+  .node{position:absolute;width:172px;min-height:58px;background:var(--panel);
+    border:1px solid var(--line);border-left:4px solid var(--mut);border-radius:9px;
+    padding:7px 9px 8px;cursor:grab;user-select:none;box-shadow:0 3px 10px #0006;
+    transition:box-shadow .12s,border-color .12s,transform .04s}
+  .node:hover{box-shadow:0 6px 20px #000a;border-color:#4a587a}
+  .node.dragging{cursor:grabbing;z-index:25;box-shadow:0 10px 26px #000c}
+  .node.dim{opacity:.28}
+  .node.sel{outline:2px solid #6f86ff;outline-offset:1px}
+  .node .t{font-size:12.5px;font-weight:600;line-height:1.15}
+  .node .r{font-size:10.5px;color:var(--mut);margin-top:3px;line-height:1.25}
+  .node .eq{font-family:"Cascadia Code",Consolas,monospace;font-size:10px;color:#9fb2d8;margin-top:4px;
+    background:#0e1320;border:1px solid #222c42;border-radius:5px;padding:1px 5px;display:inline-block}
+  .node .vtag{position:absolute;top:6px;right:7px;font-size:8.5px;font-weight:700;letter-spacing:.4px;
+    padding:1px 5px;border-radius:6px;text-transform:uppercase}
+
+  .v-exogenous{border-left-color:var(--exogenous)} .vt-exogenous{background:#2a3242;color:var(--exogenous)}
+  .v-observed{border-left-color:var(--observed)}   .vt-observed{background:#142a4d;color:#79b0ff}
+  .v-closed{border-left-color:var(--closed)}        .vt-closed{background:#262d3c;color:#9aa6bd}
+  .v-walled{border-left-color:var(--walled)}        .vt-walled{background:#3a1d1d;color:#ff8a85}
+  .v-open{border-left-color:var(--open)}            .vt-open{background:#13321f;color:#5ee08c}
+
+  /* edge labels */
+  .elabel{position:absolute;font-size:9.5px;color:#aeb9d2;background:#0c0f16cc;padding:0 3px;border-radius:4px;
+    transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity .12s;white-space:nowrap}
+  .elabel.show{opacity:1}
+
+  /* detail panel */
+  #panel{position:absolute;top:14px;right:14px;width:318px;max-height:calc(100% - 28px);overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px;z-index:28;
+    box-shadow:0 10px 34px #000a;display:none}
+  #panel.show{display:block}
+  #panel .close{float:right;cursor:pointer;color:var(--mut);font-size:16px;line-height:1;margin:-2px -2px 0 0}
+  #panel h2{font-size:15px;margin:0 26px 8px 0}
+  #panel .badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  #panel .badge{font-size:9.5px;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:7px;text-transform:uppercase}
+  #panel .eqbox{font-family:"Cascadia Code",Consolas,monospace;font-size:12px;color:#bcd0ff;background:#0e1320;
+    border:1px solid #243049;border-radius:7px;padding:7px 9px;margin:4px 0 10px;word-break:break-word}
+  #panel .role{font-size:12.5px;color:#cdd6e6;margin-bottom:8px;font-weight:500}
+  #panel .detail{font-size:12px;color:#aab6cc;line-height:1.5}
+  #panel .links{margin-top:11px;font-size:11px;color:var(--mut)}
+  #panel .links b{color:#cbd5e8;font-weight:600}
+  #panel .links span{color:#8fa9ff}
+
+  /* legend */
+  #legend{position:absolute;left:14px;bottom:14px;background:#10141fdd;border:1px solid var(--line);
+    border-radius:10px;padding:9px 11px;font-size:11px;z-index:27;backdrop-filter:blur(3px)}
+  #legend .row{display:flex;align-items:center;gap:7px;margin:3px 0;color:var(--mut)}
+  #legend .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  #legend .ttl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#566179;margin-bottom:5px;font-weight:600}
+
+  /* hint */
+  #hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);font-size:11px;color:#52607c;z-index:20}
+
+  /* export modal */
+  #modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}
+  #modal.show{display:flex}
+  #modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;width:min(760px,90vw)}
+  #modal h3{margin:0 0 4px;font-size:14px}
+  #modal p{margin:0 0 9px;font-size:11.5px;color:var(--mut)}
+  #modal textarea{width:100%;height:46vh;background:#0e1320;color:#cdd6e6;border:1px solid #243049;border-radius:8px;
+    font-family:"Cascadia Code",Consolas,monospace;font-size:11px;padding:10px;resize:vertical}
+  #modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Polymarket 5-min trading chain</h1>
+    <span class="sub">what affects what &nbsp;·&nbsp; higher = more upstream / causal (closer to the "strings")</span>
+    <span class="spacer"></span>
+    <button class="btn" id="btnFit">Fit</button>
+    <button class="btn" id="btnReset">Reset layout</button>
+    <button class="btn" id="btnExport">Export JSON</button>
+  </header>
+  <div id="stage">
+    <div id="world">
+      <svg id="edges"></svg>
+    </div>
+    <div id="panel"></div>
+    <div id="legend"></div>
+    <div id="hint">drag a node to move it · drag the background to pan · scroll to zoom · click a node for details</div>
+  </div>
+</div>
+
+<div id="modal">
+  <div class="box">
+    <h3>Layout / data export</h3>
+    <p>Copy this back into the <code>NODES</code> / <code>EDGES</code> block near the top of <b>maker_chain.html</b>
+       to persist the current positions &amp; any edits. (Positions are saved as <code>x</code>/<code>y</code> on each node.)</p>
+    <textarea id="exportTxt" spellcheck="false"></textarea>
+    <div class="actions">
+      <button class="btn" id="btnCopy">Copy</button>
+      <button class="btn" id="btnCloseModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   EDIT THE GRAPH HERE.  Two arrays drive everything below — change them and
+   reload.  Each node:
+     id       unique short id
+     title    display name
+     tier     0 = most UPSTREAM / causal root (renders at TOP); larger = downstream
+     layer    exogenous | feed | component | engine | book | cost | execution | outcome
+     verdict  exogenous | observed | closed | walled | open   (colors the node + tag)
+              exogenous = root we can't touch · observed = neutral plumbing we read
+              closed = deterministic / unbeatable-by-construction (no edge) ·
+              walled = we TRIED and it's proven no-edge · open = LIVE frontier
+     role     one-line key role
+     equation governing quantity (shown in mono), or ""
+     detail   2-3 sentence description incl. our research verdict + the real numbers
+     x,y      OPTIONAL pixel position override (the Export button writes these after you drag)
+   Each edge: { from, to, label }  — drawn from the upstream node to the downstream node.
+   Verified node/edge spec synthesized 2026-06-27 (workflow maker-chain-map) from
+   maker_behavior.md / MAKER-MODEL.md / POSTMORTEM.md + agent memories.
+   ============================================================================ */
+const NODES = [
+  // ---- tier 0 — exogenous root drivers (the "strings") ----
+  {id:"real-crypto-value", title:"Real Crypto Value", tier:0, layer:"exogenous", verdict:"exogenous",
+   role:"The true economic spot price of BTC/ETH/etc — root driver of everything downstream.",
+   equation:"S(t)",
+   detail:"The fundamental asset value set by global supply/demand. We can neither observe it directly nor predict it; we only receive proxy feeds. The ultimate exogenous root of the chain."},
+  {id:"vol-regime", title:"Volatility Regime", tier:0, layer:"exogenous", verdict:"exogenous",
+   role:"True realized spot volatility / risk-appetite state that drives the maker's σ input.",
+   equation:"σ_real ≈ 27–58% ann. (~2× spread)",
+   detail:"The actual price-movement risk over the window. The maker adaptive-tracks it (corr +0.74) but pads ~15% (VRP). Avg σ-error is self-priced/EV-neutral (WALLED), but a regime shift BEFORE the maker's σ updates is the untested conditional thread (see Conditional Sigma Lag). Exogenous root."},
+  {id:"usdt-usd-basis", title:"USDT/USD Peg Basis", tier:0, layer:"exogenous", verdict:"open",
+   role:"Stablecoin denomination mismatch: maker prices in USDT, market settles in USD.",
+   equation:"USDT − USD ≈ +16 bps",
+   detail:"Tether trades ~0.16% rich vs USD. Because the basis is near-constant (~$100, std 3), it MOSTLY CANCELS in Up/Down outcomes (strike and final share the denomination). The non-cancelling RESIDUAL — USDT moving intra-window or near-strike flips — is the only un-measured corner and an OPEN frontier; data-gated on forward Chainlink accumulation."},
+
+  // ---- tier 1 — price feeds + the settlement-feed mismatch ----
+  {id:"binance-feed", title:"Binance Spot Feed (USDT)", tier:1, layer:"feed", verdict:"observed",
+   role:"The maker's ACTUAL price input (verified) and our fastest live proxy.",
+   equation:"S_binance ≈ BTC/USDT",
+   detail:"The maker prices off Binance: quote-fit R²=0.75 vs Pyth 0.0007; joint regression coef Binance +0.87 vs Pyth +0.01 (n=904k). This is its real input. But the market SETTLES on Chainlink, so the maker carries a structural input-feed error. We just read this feed; neutral plumbing."},
+  {id:"chainlink-feed", title:"Chainlink Oracle (USD)", tier:1, layer:"feed", verdict:"open",
+   role:"The TRUE settlement reference — NOT used by the maker.",
+   equation:"S_chainlink ≈ BTC/USD",
+   detail:"Official resolution source. Public over WS (wss://ws-live-data.polymarket.com, topic crypto_prices_chainlink, ~1/s, no auth). The maker prices Binance but settles here = a STRUCTURAL input-error. ~16 bps basis mostly cancels; the residual + de-noised favorite selection is the OPEN frontier, needing weeks of forward data (collection began 2026-06-27)."},
+  {id:"maker-input-mismatch", title:"Settlement Feed Mismatch", tier:1, layer:"component", verdict:"open",
+   role:"The core structural error: maker prices the wrong denominator vs settlement.",
+   equation:"S_binance(USDT) − S_chainlink(USD)",
+   detail:"THE program's highest-priority thread: the maker computes fair value on Binance/USDT but the market resolves on Chainlink/USD. We win not by beating its OUTPUT but by computing fair value on the TRUE oracle it ignores. The ~16 bps basis cancels at large margins; the residual + near-strike flips are where it could pay. OPEN, data-gated."},
+
+  // ---- tier 2 — the maker's model INPUTS ----
+  {id:"strike-price", title:"Strike Price", tier:2, layer:"component", verdict:"closed",
+   role:"Window entry boundary, frozen at open — deterministic.",
+   equation:"K = S(t₀)",
+   detail:"Fixed at market open; both maker and we read the same strike. No estimation error possible. Deterministic input to the maker's model; nothing to exploit here — except which feed sets it (Binance vs Chainlink), which routes into the mismatch."},
+  {id:"time-to-settle", title:"Time to Settlement", tier:2, layer:"component", verdict:"closed",
+   role:"Deterministic clock countdown to expiry.",
+   equation:"t = (300 − elapsed)/300",
+   detail:"Pure 5-min countdown; both parties observe it identically. No component error possible — the maker has the same clock. Closed."},
+  {id:"maker-sigma", title:"Maker Sigma (vol input)", tier:2, layer:"component", verdict:"walled",
+   role:"The maker's ONE free / estimated parameter.",
+   equation:"σ_impl / σ_real ≈ 1.15",
+   detail:"The maker's only place to be wrong. Tracks realized vol (corr +0.74) and pads ~15% as a Variance Risk Premium. The AVERAGE σ-error is self-priced / EV-neutral (the bot prices its own confidence) = WALLED; VRP-harvest was mined-out (loss-rate p=0.013 but EV p=0.30). Orthogonal to over-round (corr −0.03)."},
+  {id:"conditional-sigma", title:"Conditional Sigma Lag", tier:2, layer:"component", verdict:"walled",
+   role:"Thread A — TESTED 2026-06-27 → DEAD (the priced latency-lag).",
+   equation:"Δσ_real ≫ Δσ_impl  (lag τ)",
+   detail:"Tested: does the maker's σ go STALE after a vol jump → favorite under-priced for flip risk? Looked alive (won~ask+staleness coef −0.41, perm-p 0.003, LOCO all-6) but the second-mind killed it: it decomposes to the recent-vol NUMERATOR not the implied-σ denominator (wrong sign), and IS the already-walled latency-lag — the coef vanishes/flips against a 15-20s-fresher ask (the maker has already marked losing favorites 0.96→0.61 by tl=10 = adverse selection). Loss-starved too (32-loser pool can't reach n_loss≥30; can't stack with over-round, Jaccard 0.58). The σ component is now fully CLOSED. dead_ends/experiment_sigma_lag.py; POSTMORTEM §1c."},
+  {id:"moneyness", title:"Moneyness d", tier:2, layer:"component", verdict:"closed",
+   role:"In-the-money distance — the dominant fair-value driver.",
+   equation:"d = ln(S/K) / (σ·√t)",
+   detail:"Both parties compute this on the same Binance feed. Predicting future S is walled (the quote already prices recent trend; market efficient-on-knowledge). No edge in moneyness itself. Closed."},
+
+  // ---- tier 3 — the fair-value ENGINE (the bot's output + risk overlays) ----
+  {id:"maker-fair-value", title:"Maker Fair-Value Engine", tier:3, layer:"engine", verdict:"closed",
+   role:"Digital-option pricing model — the maker's OUTPUT we cannot out-predict.",
+   equation:"up_mid = Φ( ln(S/K)/(σ·√t) ),  R²=0.91",
+   detail:"One synthetic-book bot per coin (Up/Down books are exact mirrors 75–81% of snapshots). Fits a Black-Scholes digital option at R²=0.91 (BTC/ETH/DOGE). This is the OUTPUT: it runs the right model on the same data we have, so directional/prediction strategies are walled by construction. Attack its INPUTS, never its output."},
+  {id:"over-round", title:"Over-Round (Spread)", tier:3, layer:"engine", verdict:"open",
+   role:"The maker's revealed confidence — its risk-overlay spread.",
+   equation:"u_ask + d_ask − 1  (~1–2%)",
+   detail:"Widens when the outcome is genuinely uncertain (corr +0.17 with |outcome−mid|). The over-round GATE (trade favorite-tail only when tight) PASSES the joint ask-control test the B-filter failed (over_round coef −0.358, z=−3.42, p=0.0006) and lifts favorite-tail to +0.0065/+0.0091. But loss-light (13 of 30 losers, CI [−0.009,+0.020] spans 0) → INSUFFICIENT. Strongest forward signal found; pre-registered, OPEN."},
+  {id:"circuit-breaker", title:"Vol Circuit-Breaker", tier:3, layer:"engine", verdict:"walled",
+   role:"Risk defense: freeze / thin one side on fast informed flow.",
+   equation:"re-quote only on >0.5c move",
+   detail:"On vol spikes the maker freezes or lets one side thin (favored-side depth ~halves). DECISIVE kill: the one-sided moment is INFORMED CONTINUATION (signed forward mid +0.040 vs +0.005 baseline = 8×, only 28% revert). The bot is correctly defending against toxic flow. Taker leg fee-walled, maker leg adverse-selected. WALLED."},
+  {id:"inventory-skew", title:"Inventory / Depth Skew", tier:3, layer:"engine", verdict:"walled",
+   role:"One-sided depth asymmetry — tested as a reversion seam.",
+   equation:"bid/(bid+ask)",
+   detail:"Depth one-sidedness ALWAYS predicts continuation (calm +0.093, spike +0.32), NEVER reversion — a calm one-sided book is priced momentum, not a reverting mistake. So providing liquidity on the abandoned side is adverse-selected at every condition. Lives in DEPTH not the mid (side field 59% noise). WALLED."},
+
+  // ---- tier 4 — the order book we observe ----
+  {id:"order-book", title:"Order Book (Up/Down)", tier:4, layer:"book", verdict:"observed",
+   role:"The observable CLOB quotes & depth we capture.",
+   equation:"down ≈ mirror(up)",
+   detail:"A single MM posts both books as exact mirrors (75–81%) — one synthetic book. We capture top-10 depth at 1/s plus sub-second book_events. Queue position is NOT observable, so fill probability must be MODELED (book_reconstruct.py validated 99.79% vs feed). Neutral plumbing; no edge in depth anomalies (they are informed continuation)."},
+
+  // ---- tier 5 — costs (the gate) ----
+  {id:"taker-fee", title:"Taker Fee", tier:5, layer:"cost", verdict:"closed",
+   role:"The cost tax on every spread-cross — the binding gate.",
+   equation:"0.07·(1−p)",
+   detail:"VERIFIED live (feeds.fetch_fee_schedule: rate 0.07, takerOnly, exponent 1): ~0.2% at p=0.97 (cheap, favorite tail) to ~3.5% at p=0.5 (brutal, mid). Grossman-Stiglitz: Polymarket introduced it explicitly to neutralize latency arb = the fee IS the price of the edge. Any edge must clear it. Deterministic/closed."},
+  {id:"maker-rebate", title:"Maker Rebate", tier:5, layer:"cost", verdict:"walled",
+   role:"Fee-free income for resting liquidity — capped & adverse-selected.",
+   equation:"S = ((v−s)/v)²·b",
+   detail:"Tiny rebate (net_ev caps 0.004) for resting at/near mid. The catch: fills occur precisely when informed flow crosses = adverse selection. Mid-band noise windows: win 30.8% at fill 0.487 → −0.365/$1 even fee-free+rebate (fill model optimistic, so upper bound). Only non-adverse fill is the favorite in over-round-tight calm windows (~breakeven). WALLED."},
+
+  // ---- tier 6 — execution & settlement outcome ----
+  {id:"entry-execution", title:"Entry / Execution", tier:6, layer:"execution", verdict:"open",
+   role:"Our trading rule: taker-cross the favorite (or maker-rest), then hold to resolution.",
+   equation:"fav_ask ∈ [0.95,0.99) + gate",
+   detail:"Favorite-tail base is NET-NEGATIVE (−0.0029 pooled, deflated p=1.0, 4/6 coins negative). Over-round gate lifts to +0.0065 but loss-light. Policy: taker-cross entry, maker-rest-at-target else hold-to-resolution (taker-exit is worst, fires on losers). The only OPEN execution corner = the over-round-gated / Chainlink-true-favorite entry; everything else walled."},
+  {id:"settlement-outcome", title:"Settlement Outcome", tier:6, layer:"outcome", verdict:"closed",
+   role:"The binary resolution: Up if final Chainlink ≥ strike Chainlink.",
+   equation:"1[ final_CL ≥ strike_CL ]",
+   detail:"Deterministic at T=300 from the Chainlink snapshot vs the T=0 strike. Up token pays $1, Down $0 (or vice versa). The maker BELIEVES it settles here but PRICES on Binance — the ~3.6% of windows where Binance and Chainlink disagree on the winner is the basis-flip tail that dirties every boundary edge. Closed once final+strike observed."},
+  {id:"pnl", title:"Realized PnL", tier:6, layer:"outcome", verdict:"closed",
+   role:"Net profit/loss per dollar staked after all costs.",
+   equation:"won − entry − 0.07·(1−p)",
+   detail:"The terminal result. Favorite-tail −0.0029/$1 (deflated p=1.0); residual basket −0.092 (pays 2 taker fees); maker-noise −0.365 (adverse selection). VERDICT: no demonstrable retail edge — efficient-on-knowledge (Grossman-Stiglitz), fee-taxed where the edge would live, −100% binary skew. Only OPEN corners: settlement-residual + conditional-σ + over-round gate, all data-gated."},
+];
+
+const EDGES = [
+  {from:"real-crypto-value", to:"binance-feed",   label:"observed as USDT quote"},
+  {from:"real-crypto-value", to:"chainlink-feed", label:"aggregated as USD oracle"},
+  {from:"usdt-usd-basis",    to:"binance-feed",   label:"USDT ~16 bps rich"},
+  {from:"usdt-usd-basis",    to:"chainlink-feed", label:"USD denomination"},
+  {from:"vol-regime",        to:"maker-sigma",       label:"drives σ (corr +0.74)"},
+  {from:"vol-regime",        to:"conditional-sigma", label:"regime break σ can lag"},
+
+  {from:"binance-feed",   to:"maker-input-mismatch", label:"maker's wrong-feed input"},
+  {from:"chainlink-feed", to:"maker-input-mismatch", label:"true oracle, unused"},
+  {from:"binance-feed",   to:"strike-price", label:"K = snap at t=0"},
+  {from:"binance-feed",   to:"moneyness",    label:"S in ln(S/K)"},
+  {from:"chainlink-feed", to:"settlement-outcome", label:"final vs strike snapshot"},
+  {from:"usdt-usd-basis", to:"settlement-outcome", label:"residual flips near strike"},
+  {from:"maker-input-mismatch", to:"settlement-outcome", label:"basis residual affects flip"},
+
+  {from:"strike-price",      to:"maker-fair-value", label:"K input"},
+  {from:"time-to-settle",    to:"maker-fair-value", label:"t input"},
+  {from:"maker-sigma",       to:"maker-fair-value", label:"σ input (+15% VRP)"},
+  {from:"conditional-sigma", to:"maker-sigma",      label:"stale σ when regime shifts"},
+  {from:"moneyness",         to:"maker-fair-value", label:"d = ln(S/K)/(σ√t)"},
+
+  {from:"maker-fair-value", to:"over-round",  label:"mid → spread overlay"},
+  {from:"maker-fair-value", to:"order-book",  label:"mid prices bid/ask"},
+  {from:"over-round",       to:"order-book",  label:"sets spread width"},
+  {from:"binance-feed",     to:"circuit-breaker", label:"fast spot move triggers"},
+  {from:"circuit-breaker",  to:"order-book",  label:"freezes / thins one side"},
+  {from:"inventory-skew",   to:"order-book",  label:"depth one-sidedness"},
+
+  {from:"order-book",        to:"entry-execution", label:"observable ask + depth"},
+  {from:"over-round",        to:"entry-execution", label:"gate: trade only when tight"},
+  {from:"conditional-sigma", to:"entry-execution", label:"underpriced-favorite signal"},
+  {from:"taker-fee",         to:"entry-execution", label:"cost 0.07(1−p) on cross"},
+  {from:"maker-rebate",      to:"entry-execution", label:"fee-free alt (adverse-selected)"},
+
+  {from:"entry-execution",    to:"pnl", label:"entry price locked"},
+  {from:"settlement-outcome", to:"pnl", label:"won = 0 or 1 payout"},
+];
+
+const TIER_LABELS = [
+  {t:"Tier 0 — exogenous root drivers (the \"strings\")",      h:"play as HIGH as you can"},
+  {t:"Tier 1 — price feeds + the settlement-feed mismatch",   h:"maker prices Binance · settles Chainlink"},
+  {t:"Tier 2 — the maker's model INPUTS",                     h:"beat ONE of these = beat the maker"},
+  {t:"Tier 3 — the fair-value ENGINE (its output + overlays)", h:"do NOT out-predict the output"},
+  {t:"Tier 4 — the order book we observe",                    h:"prices + sizes · no queue visibility"},
+  {t:"Tier 5 — costs (the gate)",                             h:"the fee taxes where the edge would live"},
+  {t:"Tier 6 — execution & settlement outcome",               h:"−100%-skewed binary payoff"},
+];
+
+/* ===================== rendering / interaction engine ===================== */
+const NODE_W=172, NODE_H=64, TIER_H=158, TOP=44, LEFT_PAD=40, COL_W=212, WORLD_W=2460;
+const stage=document.getElementById('stage'), world=document.getElementById('world'),
+      svg=document.getElementById('edges'), panel=document.getElementById('panel');
+const byId={}; NODES.forEach(n=>byId[n.id]=n);
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function autoLayout(){
+  const tiers={};
+  NODES.forEach(n=>{(tiers[n.tier]=tiers[n.tier]||[]).push(n);});
+  Object.keys(tiers).forEach(t=>{
+    const row=tiers[t]; const n=row.length;
+    const total=n*COL_W; const startX=Math.max(LEFT_PAD,(WORLD_W-total)/2);
+    row.forEach((node,i)=>{
+      if(node.x==null) node.x=startX+i*COL_W+(COL_W-NODE_W)/2;
+      if(node.y==null) node.y=TOP+(+t)*TIER_H+30;
+    });
+  });
+}
+function resetLayout(){ NODES.forEach(n=>{delete n.x;delete n.y;}); autoLayout(); placeNodes(); drawEdges(); }
+
+const maxTier=Math.max(...NODES.map(n=>n.tier));
+const WORLD_H=TOP+(maxTier+1)*TIER_H+40;
+world.style.width=WORLD_W+'px'; world.style.height=WORLD_H+'px';
+svg.setAttribute('width',WORLD_W); svg.setAttribute('height',WORLD_H);
+
+// tier bands
+TIER_LABELS.forEach((info,i)=>{
+  const b=document.createElement('div'); b.className='band';
+  b.style.top=(TOP+i*TIER_H)+'px'; b.style.width=WORLD_W+'px'; b.style.height=TIER_H+'px';
+  b.innerHTML=`<span class="lbl">${esc(info.t)}</span><span class="hint">${esc(info.h)}</span>`;
+  world.appendChild(b);
+});
+
+// nodes
+const nodeEls={};
+function makeNodes(){
+  NODES.forEach(n=>{
+    const el=document.createElement('div');
+    el.className=`node v-${n.verdict}`; el.dataset.id=n.id;
+    el.innerHTML=`<span class="vtag vt-${n.verdict}">${esc(n.verdict)}</span>`+
+      `<div class="t">${esc(n.title)}</div><div class="r">${esc(n.role)}</div>`+
+      (n.equation?`<div class="eq">${esc(n.equation)}</div>`:``);
+    world.appendChild(el); nodeEls[n.id]=el;
+    el.addEventListener('mousedown',e=>startNodeDrag(e,n));
+    el.addEventListener('mouseenter',()=>highlight(n.id));
+    el.addEventListener('mouseleave',()=>highlight(null));
+    el.addEventListener('click',e=>{e.stopPropagation();openPanel(n);});
+  });
+}
+function placeNodes(){ NODES.forEach(n=>{const el=nodeEls[n.id]; el.style.left=n.x+'px'; el.style.top=n.y+'px';}); }
+function center(n){ return {x:n.x+NODE_W/2, y:n.y+ (nodeEls[n.id].offsetHeight||NODE_H)/2}; }
+
+// edges
+const NS='http://www.w3.org/2000/svg';
+let defs=document.createElementNS(NS,'defs');
+defs.innerHTML=`<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+  <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker>
+  <marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+  <path d="M0,0 L10,5 L0,10 z" fill="var(--edge-hl)"/></marker>`;
+svg.appendChild(defs);
+const edgeEls=[];
+function makeEdges(){
+  EDGES.forEach(e=>{
+    if(!byId[e.from]||!byId[e.to]) return;
+    const p=document.createElementNS(NS,'path');
+    p.setAttribute('fill','none'); p.setAttribute('stroke','var(--edge)');
+    p.setAttribute('stroke-width','1.6'); p.setAttribute('marker-end','url(#arrow)');
+    svg.appendChild(p);
+    const lab=document.createElement('div'); lab.className='elabel'; lab.textContent=e.label;
+    world.appendChild(lab);
+    edgeEls.push({e,p,lab});
+  });
+}
+function drawEdges(){
+  edgeEls.forEach(({e,p,lab})=>{
+    const a=center(byId[e.from]), b=center(byId[e.to]);
+    const dy=b.y-a.y; const cseg=Math.max(28,Math.abs(dy)*0.4);
+    const c1y=a.y+cseg, c2y=b.y-cseg;
+    p.setAttribute('d',`M ${a.x},${a.y} C ${a.x},${c1y} ${b.x},${c2y} ${b.x},${b.y}`);
+    lab.style.left=((a.x+b.x)/2)+'px'; lab.style.top=((a.y+b.y)/2)+'px';
+  });
+}
+
+// highlight connected edges + show labels
+function highlight(id){
+  if(!id){
+    edgeEls.forEach(({p,lab})=>{p.setAttribute('stroke','var(--edge)');p.setAttribute('stroke-width','1.6');
+      p.setAttribute('marker-end','url(#arrow)');lab.classList.remove('show');});
+    Object.values(nodeEls).forEach(el=>el.classList.remove('dim'));
+    return;
+  }
+  const conn=new Set();
+  edgeEls.forEach(({e})=>{ if(e.from===id||e.to===id){conn.add(e.from);conn.add(e.to);} });
+  edgeEls.forEach(({e,p,lab})=>{
+    const on=(e.from===id||e.to===id);
+    p.setAttribute('stroke',on?'var(--edge-hl)':'var(--edge)');
+    p.setAttribute('stroke-width',on?'2.4':'1.1');
+    p.setAttribute('marker-end',on?'url(#arrowhl)':'url(#arrow)');
+    lab.classList.toggle('show',on);
+  });
+  Object.entries(nodeEls).forEach(([nid,el])=>el.classList.toggle('dim',!conn.has(nid)&&nid!==id));
+}
+
+// detail panel
+const LAYER_DESC={exogenous:"root driver",feed:"price feed",component:"model input",engine:"maker engine",
+  book:"order book",cost:"cost",execution:"execution",outcome:"outcome"};
+const VERDICT_DESC={exogenous:"can't touch",observed:"neutral plumbing",closed:"deterministic — no edge",
+  walled:"tried — proven no edge",open:"LIVE frontier"};
+function openPanel(n){
+  Object.values(nodeEls).forEach(el=>el.classList.remove('sel'));
+  nodeEls[n.id].classList.add('sel');
+  const feedsInto=EDGES.filter(e=>e.from===n.id).map(e=>byId[e.to]?byId[e.to].title:e.to);
+  const drivenBy =EDGES.filter(e=>e.to===n.id).map(e=>byId[e.from]?byId[e.from].title:e.from);
+  panel.innerHTML=
+    `<span class="close" id="pclose">×</span>`+
+    `<h2>${esc(n.title)}</h2>`+
+    `<div class="badges">`+
+      `<span class="badge vt-${n.verdict}">${esc(n.verdict)} · ${esc(VERDICT_DESC[n.verdict])}</span>`+
+      `<span class="badge" style="background:#1a2030;color:#9fb2d8">${esc(LAYER_DESC[n.layer])} · tier ${n.tier}</span>`+
+    `</div>`+
+    (n.equation?`<div class="eqbox">${esc(n.equation)}</div>`:``)+
+    `<div class="role">${esc(n.role)}</div>`+
+    `<div class="detail">${esc(n.detail)}</div>`+
+    `<div class="links"><b>feeds into:</b> <span>${esc(feedsInto.join(', ')||'—')}</span></div>`+
+    `<div class="links"><b>driven by:</b> <span>${esc(drivenBy.join(', ')||'—')}</span></div>`;
+  panel.classList.add('show');
+  document.getElementById('pclose').onclick=()=>{panel.classList.remove('show');nodeEls[n.id].classList.remove('sel');};
+}
+stage.addEventListener('click',()=>{panel.classList.remove('show');Object.values(nodeEls).forEach(el=>el.classList.remove('sel'));});
+
+// legend
+const LEG=[["LIVE frontier (attack here)","--open"],["tried — proven no edge","--walled"],
+  ["deterministic / no edge","--closed"],["neutral plumbing we read","--observed"],
+  ["root driver we can't touch","--exogenous"]];
+document.getElementById('legend').innerHTML=`<div class="ttl">verdict</div>`+
+  LEG.map(([d,v])=>`<div class="row"><span class="sw" style="background:var(${v})"></span>${d}</div>`).join('');
+
+/* ---- pan / zoom ---- */
+let scale=1, tx=0, ty=0;
+function applyView(){ world.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; }
+function fit(){
+  const r=stage.getBoundingClientRect();
+  scale=Math.min((r.width-40)/WORLD_W,(r.height-40)/WORLD_H,1);
+  tx=(r.width-WORLD_W*scale)/2; ty=12; applyView();
+}
+stage.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=stage.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const k=e.deltaY<0?1.1:1/1.1; const ns=Math.min(2.2,Math.max(0.25,scale*k));
+  tx=mx-(mx-tx)*(ns/scale); ty=my-(my-ty)*(ns/scale); scale=ns; applyView();
+},{passive:false});
+
+let panning=false,psx,psy,ptx,pty;
+stage.addEventListener('mousedown',e=>{
+  if(e.target.closest('.node')) return;
+  panning=true;stage.classList.add('panning');psx=e.clientX;psy=e.clientY;ptx=tx;pty=ty;
+});
+window.addEventListener('mousemove',e=>{
+  if(panning){tx=ptx+(e.clientX-psx);ty=pty+(e.clientY-psy);applyView();}
+});
+window.addEventListener('mouseup',()=>{panning=false;stage.classList.remove('panning');});
+
+/* ---- node drag ---- */
+let drag=null;
+function startNodeDrag(e,n){
+  e.preventDefault();e.stopPropagation();
+  drag={n,sx:e.clientX,sy:e.clientY,ox:n.x,oy:n.y};
+  nodeEls[n.id].classList.add('dragging');
+}
+window.addEventListener('mousemove',e=>{
+  if(!drag)return;
+  drag.n.x=drag.ox+(e.clientX-drag.sx)/scale;
+  drag.n.y=drag.oy+(e.clientY-drag.sy)/scale;
+  const el=nodeEls[drag.n.id]; el.style.left=drag.n.x+'px'; el.style.top=drag.n.y+'px';
+  drawEdges();
+});
+window.addEventListener('mouseup',()=>{ if(drag){nodeEls[drag.n.id].classList.remove('dragging');drag=null;} });
+
+/* ---- export ---- */
+const modal=document.getElementById('modal');
+document.getElementById('btnExport').onclick=()=>{
+  const nodes=NODES.map(n=>({id:n.id,title:n.title,tier:n.tier,layer:n.layer,verdict:n.verdict,
+    role:n.role,equation:n.equation,detail:n.detail,x:Math.round(n.x),y:Math.round(n.y)}));
+  document.getElementById('exportTxt').value=
+    'const NODES = '+JSON.stringify(nodes,null,2)+';\n\nconst EDGES = '+JSON.stringify(EDGES,null,2)+';';
+  modal.classList.add('show');
+};
+document.getElementById('btnCloseModal').onclick=()=>modal.classList.remove('show');
+document.getElementById('btnCopy').onclick=()=>{
+  const t=document.getElementById('exportTxt'); t.select(); document.execCommand('copy');
+  document.getElementById('btnCopy').textContent='Copied!';
+  setTimeout(()=>document.getElementById('btnCopy').textContent='Copy',1200);
+};
+document.getElementById('btnReset').onclick=resetLayout;
+document.getElementById('btnFit').onclick=fit;
+
+/* ---- boot ---- */
+autoLayout(); makeNodes(); makeEdges(); placeNodes(); drawEdges(); fit();
+</script>
+</body>
+</html>

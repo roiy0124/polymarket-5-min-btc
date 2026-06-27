@@ -27,6 +27,7 @@ PSR / Wilson are the *same* test — they're shown as presentation, not stacked 
 | **Reversion: after-recovery** | 262 | 121 | **−0.0041** | 1.00 | **FAILS** (was "+0.011 borderline") |
 | **Reversion: peer-surge** | 254 | 167 | **−0.16** | 1.00 | **FAILS** (win-rate flipped 41.6%→34.3%) |
 | **Spot cross-asset lead-lag** | 575k (spot) | — | — | — | real predictor, **never beats the quote** (priced) |
+| **Conditional σ-lag** (Thread A) | 919 | 32 | +0.008 gated | 1.00 | **DEAD** (priced latency-lag; loss-starved — §1c) |
 
 The borderline "pulses" (b-filter p=0.002, peer-surge +0.034, spike-fade 12/18) all **regressed to
 negative or insufficient as data accrued** — the textbook deflated-Sharpe null asserting itself.
@@ -71,6 +72,32 @@ and adversarially reviewed by an independent second-mind agent. All four resolve
   is a ~0.1% tail → ~18 events across the whole archive); sub-second `price_ticks` sharpen *detection* but
   cannot add token windows. At most WAIT-FOR-DATA with a pre-committed kill (n_loss≥30 AND monotone resid).
 - **Idiosyncratic-spike** — descriptive only; its sole consumer (spike-fade) is dead, so it has no live role.
+
+### 1c. Conditional σ-lag (Thread A of the maker-component program) — 2026-06-27, second-mind reviewed
+
+The "predict the maker's INPUTS not its OUTPUT" program (see `maker_behavior.md`) put the **σ component**
+first: not the *average* σ-error (self-priced VRP, already dead) but a **conditional** one — does the maker's
+σ go STALE for a beat after a fast vol-regime change, leaving the favorite under-priced for flip risk?
+(`dead_ends/experiment_sigma_lag.py` + `_probe.py`.) It looked alive: a clean monotone dose-response (EV
++0.0064 → −0.0666 as `staleness=recent_vol/implied_σ` rises) and a joint ask-control PASS (`won ~ fav_ask +
+staleness`: coef −0.41, **negative in 100% of cluster-refits, perm-p 0.003**, survives adding over_round,
+LOCO-stable across all 6 coins, beats 200 placebos, deflates to ~0 at K=200).
+
+A 3-angle independent second-mind **killed it on two grounds:**
+1. **It IS the walled latency-lag, not a stale σ.** Decomposition: the signal is entirely the recent-vol
+   *numerator*, the implied-σ *denominator* has the wrong sign — so "stale σ" is a misnomer; and `recent_vol`
+   adds **nothing beyond raw |move|** (incremental coef −0.001). The clincher: re-measure the favorite ask
+   **fresher** and the coef dies monotonically (ask@tl=30 −0.256/p=.04 → ask@tl=10 **+0.105/p=.66, sign flip**);
+   the winner-vs-loser ask gap goes +0.002 @tl=30 → **+0.36 @tl=10** (the continuously-requoting maker has
+   already marked losing favorites 0.96→0.61). You'd be buying at 0.96 a thing repriced to 0.61 seconds later
+   = adverse selection. Plus the effect is a **3-second-wide spike at tl=30** (collapses at tl=33/35, flips
+   positive at tl=50) — a frozen-quote-cadence artifact, not a smooth microstructure law.
+2. **Loss-starved by construction.** The favorite-tail pool has only **32 losers**, so any gate selective
+   enough to lift EV starves below n_loss=30 (all 21 sweep cells INSUFFICIENT; gated +0.0084 flips negative at
+   +3 losers). Stacking with over-round is dead-on-arrival — the two cut the **same losers** (Jaccard 0.58–0.69),
+   so the stack starves to 6 losers. **Durable meta-lesson:** *every loser-cutting filter on the favorite-tail
+   base is INSUFFICIENT by construction until the loser pool grows past ~90–100 (months more data).* This is
+   why over-round can't graduate either — stop testing filters of this shape on favorite-tail. Thread A CLOSED.
 
 ## 2. Why — the walls, reframed against theory
 

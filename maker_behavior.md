@@ -30,7 +30,7 @@ The reframe that re-opens the program. Two different games, and we were stuck in
 |---|---|---|---|
 | **time** `t` | no — deterministic, we both have it | no edge | closed |
 | **strike** | fixed at open; both observe it (but on WHICH feed? see spot) | — | tied to spot |
-| **σ** (volatility) | yes — its ONE estimated input | tested: avg σ-error is **self-priced / EV-neutral** (VRP). Maybe wrong *conditionally* (regime change before its σ updates)? | mostly closed; conditional untested |
+| **σ** (volatility) | yes — its ONE estimated input | avg σ-error is **self-priced / EV-neutral** (VRP, dead). **Conditional σ-lag now TESTED (2026-06-27) → DEAD**: the "stale σ" signal decomposes to the recent-vol numerator (not the implied-σ denominator) and is the already-walled **latency-lag** — it vanishes/flips against a 15-20s-fresher ask (loser favorites already marked 0.96→0.61 by tl=10). Loss-starved too (32-loser pool). | **CLOSED** (Thread A killed) |
 | **spot / settlement feed** | **YES — structurally, NOW CONFIRMED.** The maker prices off **BINANCE** (verified: maker-quote fit R²=0.75 vs Binance, 0.0007 vs Pyth; joint coef Binance +0.87 vs Pyth +0.01), but the market **SETTLES on Chainlink**. So its spot input is *systematically the wrong denomination/source* by the basis dynamics. | **the OPEN component** — maker=Binance CONFIRMED; build fair value on Chainlink (forward data) | **OPEN — highest priority** |
 
 **Step 1 of the program DONE (2026-06-27):** *which feed does the maker price off?* → **BINANCE, decisively**
@@ -174,6 +174,60 @@ collector started logging it 2026-06-27).
 - Whether it's truly **one** MM or a few coordinated (mirror evidence ⇒ ~one, not certain). **[unknown]**
 - The **residual settlement basis** behavior — now measurable, needs forward data. **[unknown]**
 - Whether the **over-round gate** survives on fresh data with ≥30 losers (pre-registered, loss-light today). **[unknown]**
+
+## 9. THE SAVED PROGRAM PLAN — component-attack roadmap (saved 2026-06-27)
+
+The plan from §0, written down because **we cannot test all of it now** (the decisive piece is data-gated).
+This is the resume point: when forward Chainlink data has accrued, start at Thread B.
+
+**The frame (recap):** the maker's quote `Φ((spot − strike)/(σ·√t))` is its OUTPUT — unbeatable. We attack its
+**INPUTS**. We win if we estimate any ONE component better than the maker. String hierarchy: **L0** = predict the
+output (walled) · **L1** = compute fair value with a *better input* than the maker · **L2** = predict a
+component's *driver* before the maker incorporates it.
+
+**Component-by-component attack status:**
+
+| component | how we'd beat it | testable NOW? | status / thread |
+|---|---|---|---|
+| time `t` | — (deterministic) | — | **closed** |
+| strike | — (frozen at open; = a spot read) | — | tied to the spot feed |
+| σ — *average* | trade implied-vs-realized gap | — | **walled** (VRP, self-priced, EV-neutral) |
+| σ — *conditional* | catch the moment its σ lags a regime shift, before it re-quotes | tested 2026-06-27 | **Thread A — CLOSED / DEAD** (priced latency-lag + loss-starved; see below) |
+| spot / settlement feed | compute fair value on the TRUE Chainlink oracle vs its Binance quote | **NO — needs forward Chainlink** | **Thread B — OPEN, highest priority** |
+
+**Thread A — conditional-σ error. DONE 2026-06-27 → DEAD** (`dead_ends/experiment_sigma_lag.py` + `_probe.py`;
+POSTMORTEM §1c). Built the causal realized-vol vs implied-σ divergence detector and conditioned favorite-tail
+on it. It LOOKED alive (monotone dose-response; `won ~ fav_ask + staleness` coef −0.41, perm-p 0.003, survives
+over_round, LOCO all-6, deflates at K=200) but the 3-angle second-mind killed it: **(1)** it decomposes to the
+recent-vol numerator, NOT the implied-σ denominator (wrong sign), and IS the already-walled **latency-lag** —
+the coef dies/flips against a 15-20s-fresher ask (the continuously-requoting maker has already marked losing
+favorites 0.96→0.61 by tl=10; buying at 0.96 = adverse selection), a 3s-wide tl=30 spike, recent_vol adds
+nothing beyond raw |move|. **(2)** Loss-starved: the favorite-tail pool has only ~32 losers, so any selective
+filter starves below n_loss=30 and can't stack with over-round (Jaccard 0.58, cuts the same losers). **Durable
+meta-lesson:** *every loser-cutting filter on the favorite-tail base is INSUFFICIENT by construction until the
+loser pool grows past ~90-100 (months more data)* — this is why over-round can't graduate either; stop testing
+filters of this shape on favorite-tail. **The σ component is now fully closed** (avg = self-priced VRP;
+conditional = priced latency-lag). The live program reduces to **Thread B (settlement feed), data-gated.**
+
+**Thread B — settlement-feed component (data-gated; the reason we added the Chainlink layer).** Step 1 DONE:
+the maker prices off **Binance** (R²=0.75 vs Pyth 0.0007) but the market settles on **Chainlink**. The decisive
+test: rebuild the maker's fair value on the **Chainlink** oracle and compare to its **Binance** quote; in the
+windows where they diverge — concentrated **near-strike** (a few bps flips Up↔Down) and at the **favorite**
+(fee ~0.2%, not 3.5%) — is the Chainlink-true outcome mispriced by the Binance-based quote *enough to beat the
+fee*? The constant ~16 bps USDT/USD basis **cancels**; the edge is only in the **residual** (USDT moving
+intra-window / near-strike flips). Needs ~weeks of forward Chainlink data (collection started 2026-06-27).
+
+**Parked candidate that rides alongside:** the **over-round gate** (§4) — re-gate on fresh data once it has
+**≥30 losers**; cleaning favorite-selection with the Chainlink oracle (Thread B step 3) may de-noise it.
+
+**Discipline locked for every thread (no exceptions):** causal only; charge the live fee (`net_ev`); route
+through `analysis/stats.assess` (deflated cluster-bootstrap on the net-EV stream, **n_loss ≥ 30**, CI excludes
+0); run the **second-mind** adversarial refutation; self-normalize constants per-coin (`analysis/adaptive.py`),
+never re-fit a free threshold; pre-register + LOCK params before the OOS read. A loss-light "pass" is noise.
+
+**Map of this chain:** see `maker_chain.html` (open in a browser) — the interactive, editable hierarchy of the
+whole Polymarket trading chain (what affects what; height = how upstream/causal; click a node for its role +
+equation + our verdict). Edit the `NODES`/`EDGES` block at the top of that file to revise it.
 
 ## One-paragraph summary
 
