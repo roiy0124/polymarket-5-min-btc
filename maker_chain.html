@@ -157,158 +157,614 @@
    maker_behavior.md / MAKER-MODEL.md / POSTMORTEM.md + agent memories.
    ============================================================================ */
 const NODES = [
-  // ---- tier 0 — exogenous root drivers (the "strings") ----
-  {id:"real-crypto-value", title:"Real Crypto Value", tier:0, layer:"exogenous", verdict:"exogenous",
-   role:"The true economic spot price of BTC/ETH/etc — root driver of everything downstream.",
-   equation:"S(t)",
-   detail:"The fundamental asset value set by global supply/demand. We can neither observe it directly nor predict it; we only receive proxy feeds. The ultimate exogenous root of the chain."},
-  {id:"vol-regime", title:"Volatility Regime", tier:0, layer:"exogenous", verdict:"exogenous",
-   role:"True realized spot volatility / risk-appetite state that drives the maker's σ input.",
-   equation:"σ_real ≈ 27–58% ann. (~2× spread)",
-   detail:"The actual price-movement risk over the window. The maker adaptive-tracks it (corr +0.74) but pads ~15% (VRP). Avg σ-error is self-priced/EV-neutral (WALLED), but a regime shift BEFORE the maker's σ updates is the untested conditional thread (see Conditional Sigma Lag). Exogenous root."},
-  {id:"usdt-usd-basis", title:"USDT/USD Peg Basis", tier:0, layer:"exogenous", verdict:"open",
-   role:"Stablecoin denomination mismatch: maker prices in USDT, market settles in USD.",
-   equation:"USDT − USD ≈ +16 bps",
-   detail:"Tether trades ~0.16% rich vs USD. Because the basis is near-constant (~$100, std 3), it MOSTLY CANCELS in Up/Down outcomes (strike and final share the denomination). The non-cancelling RESIDUAL — USDT moving intra-window or near-strike flips — is the only un-measured corner and an OPEN frontier; data-gated on forward Chainlink accumulation."},
-
-  // ---- tier 1 — price feeds + the settlement-feed mismatch ----
-  {id:"binance-feed", title:"Binance Spot Feed (USDT)", tier:1, layer:"feed", verdict:"observed",
-   role:"The maker's ACTUAL price input (verified) and our fastest live proxy.",
-   equation:"S_binance ≈ BTC/USDT",
-   detail:"The maker prices off Binance: quote-fit R²=0.75 vs Pyth 0.0007; joint regression coef Binance +0.87 vs Pyth +0.01 (n=904k). This is its real input. But the market SETTLES on Chainlink, so the maker carries a structural input-feed error. We just read this feed; neutral plumbing."},
-  {id:"chainlink-feed", title:"Chainlink Oracle (USD)", tier:1, layer:"feed", verdict:"open",
-   role:"The TRUE settlement reference — NOT used by the maker.",
-   equation:"S_chainlink ≈ BTC/USD",
-   detail:"Official resolution source. Public over WS (wss://ws-live-data.polymarket.com, topic crypto_prices_chainlink, ~1/s, no auth). The maker prices Binance but settles here = a STRUCTURAL input-error. ~16 bps basis mostly cancels; the residual + de-noised favorite selection is the OPEN frontier, needing weeks of forward data (collection began 2026-06-27)."},
-  {id:"maker-input-mismatch", title:"Settlement Feed Mismatch", tier:1, layer:"component", verdict:"open",
-   role:"The core structural error: maker prices the wrong denominator vs settlement.",
-   equation:"S_binance(USDT) − S_chainlink(USD)",
-   detail:"THE program's highest-priority thread: the maker computes fair value on Binance/USDT but the market resolves on Chainlink/USD. We win not by beating its OUTPUT but by computing fair value on the TRUE oracle it ignores. The ~16 bps basis cancels at large margins; the residual + near-strike flips are where it could pay. OPEN, data-gated."},
-
-  // ---- tier 2 — the maker's model INPUTS ----
-  {id:"strike-price", title:"Strike Price", tier:2, layer:"component", verdict:"closed",
-   role:"Window entry boundary, frozen at open — deterministic.",
-   equation:"K = S(t₀)",
-   detail:"Fixed at market open; both maker and we read the same strike. No estimation error possible. Deterministic input to the maker's model; nothing to exploit here — except which feed sets it (Binance vs Chainlink), which routes into the mismatch."},
-  {id:"time-to-settle", title:"Time to Settlement", tier:2, layer:"component", verdict:"closed",
-   role:"Deterministic clock countdown to expiry.",
-   equation:"t = (300 − elapsed)/300",
-   detail:"Pure 5-min countdown; both parties observe it identically. No component error possible — the maker has the same clock. Closed."},
-  {id:"maker-sigma", title:"Maker Sigma (vol input)", tier:2, layer:"component", verdict:"walled",
-   role:"The maker's ONE free / estimated parameter.",
-   equation:"σ_impl / σ_real ≈ 1.15",
-   detail:"The maker's only place to be wrong. Tracks realized vol (corr +0.74) and pads ~15% as a Variance Risk Premium. The AVERAGE σ-error is self-priced / EV-neutral (the bot prices its own confidence) = WALLED; VRP-harvest was mined-out (loss-rate p=0.013 but EV p=0.30). Orthogonal to over-round (corr −0.03)."},
-  {id:"conditional-sigma", title:"Conditional Sigma Lag", tier:2, layer:"component", verdict:"walled",
-   role:"Thread A — TESTED 2026-06-27 → DEAD (the priced latency-lag).",
-   equation:"Δσ_real ≫ Δσ_impl  (lag τ)",
-   detail:"Tested: does the maker's σ go STALE after a vol jump → favorite under-priced for flip risk? Looked alive (won~ask+staleness coef −0.41, perm-p 0.003, LOCO all-6) but the second-mind killed it: it decomposes to the recent-vol NUMERATOR not the implied-σ denominator (wrong sign), and IS the already-walled latency-lag — the coef vanishes/flips against a 15-20s-fresher ask (the maker has already marked losing favorites 0.96→0.61 by tl=10 = adverse selection). Loss-starved too (32-loser pool can't reach n_loss≥30; can't stack with over-round, Jaccard 0.58). The σ component is now fully CLOSED. dead_ends/experiment_sigma_lag.py; POSTMORTEM §1c."},
-  {id:"moneyness", title:"Moneyness d", tier:2, layer:"component", verdict:"closed",
-   role:"In-the-money distance — the dominant fair-value driver.",
-   equation:"d = ln(S/K) / (σ·√t)",
-   detail:"Both parties compute this on the same Binance feed. Predicting future S is walled (the quote already prices recent trend; market efficient-on-knowledge). No edge in moneyness itself. Closed."},
-
-  // ---- tier 3 — the fair-value ENGINE (the bot's output + risk overlays) ----
-  {id:"maker-fair-value", title:"Maker Fair-Value Engine", tier:3, layer:"engine", verdict:"closed",
-   role:"Digital-option pricing model — the maker's OUTPUT we cannot out-predict.",
-   equation:"up_mid = Φ( ln(S/K)/(σ·√t) ),  R²=0.91",
-   detail:"One synthetic-book bot per coin (Up/Down books are exact mirrors 75–81% of snapshots). Fits a Black-Scholes digital option at R²=0.91 (BTC/ETH/DOGE). This is the OUTPUT: it runs the right model on the same data we have, so directional/prediction strategies are walled by construction. Attack its INPUTS, never its output. Reconfirmed 2026-06-28: a principled drift-augmented FUTURE-value model (Φ with a near-trend drift term) adds NOTHING beyond this quote (drift coef collapses given the mid, corr with residual ~0, robust across a tl×window grid) — the maker already prices the near-trend, so its up_mid IS the best free real-time near-trend oracle → export it (Outcome 2), don't out-predict it."},
-  {id:"over-round", title:"Over-Round (Spread)", tier:3, layer:"engine", verdict:"open",
-   role:"The maker's revealed confidence — its risk-overlay spread.",
-   equation:"u_ask + d_ask − 1  (~1–2%)",
-   detail:"Widens when the outcome is genuinely uncertain (corr +0.17 with |outcome−mid|). The over-round GATE (trade favorite-tail only when tight) PASSES the joint ask-control test the B-filter failed (over_round coef −0.358, z=−3.42, p=0.0006) and lifts favorite-tail to +0.0065/+0.0091. But loss-light (13 of 30 losers, CI [−0.009,+0.020] spans 0) → INSUFFICIENT. Strongest forward signal found; pre-registered, OPEN."},
-  {id:"circuit-breaker", title:"Vol Circuit-Breaker", tier:3, layer:"engine", verdict:"walled",
-   role:"Risk defense: freeze / thin one side on fast informed flow.",
-   equation:"re-quote only on >0.5c move",
-   detail:"On vol spikes the maker freezes or lets one side thin (favored-side depth ~halves). DECISIVE kill: the one-sided moment is INFORMED CONTINUATION (signed forward mid +0.040 vs +0.005 baseline = 8×, only 28% revert). The bot is correctly defending against toxic flow. Taker leg fee-walled, maker leg adverse-selected. WALLED."},
-  {id:"inventory-skew", title:"Inventory / Depth Skew", tier:3, layer:"engine", verdict:"walled",
-   role:"One-sided depth asymmetry — tested as a reversion seam.",
-   equation:"bid/(bid+ask)",
-   detail:"Depth one-sidedness ALWAYS predicts continuation (calm +0.093, spike +0.32), NEVER reversion — a calm one-sided book is priced momentum, not a reverting mistake. So providing liquidity on the abandoned side is adverse-selected at every condition. Lives in DEPTH not the mid (side field 59% noise). WALLED."},
-
-  // ---- tier 4 — the order book we observe ----
-  {id:"order-book", title:"Order Book (Up/Down)", tier:4, layer:"book", verdict:"observed",
-   role:"The observable CLOB quotes & depth we capture.",
-   equation:"down ≈ mirror(up)",
-   detail:"A single MM posts both books as exact mirrors (75–81%) — one synthetic book. We capture top-10 depth at 1/s plus sub-second book_events. Queue position is NOT observable, so fill probability must be MODELED (book_reconstruct.py validated 99.79% vs feed). Neutral plumbing; no edge in depth anomalies (they are informed continuation)."},
-
-  // ---- tier 5 — costs (the gate) ----
-  {id:"taker-fee", title:"Taker Fee", tier:5, layer:"cost", verdict:"closed",
-   role:"The cost tax on every spread-cross — the binding gate.",
-   equation:"0.07·(1−p)",
-   detail:"VERIFIED live (feeds.fetch_fee_schedule: rate 0.07, takerOnly, exponent 1): ~0.2% at p=0.97 (cheap, favorite tail) to ~3.5% at p=0.5 (brutal, mid). Grossman-Stiglitz: Polymarket introduced it explicitly to neutralize latency arb = the fee IS the price of the edge. Any edge must clear it. Deterministic/closed."},
-  {id:"maker-rebate", title:"Maker Rebate", tier:5, layer:"cost", verdict:"walled",
-   role:"Fee-free income for resting liquidity — capped & adverse-selected.",
-   equation:"S = ((v−s)/v)²·b",
-   detail:"Tiny rebate (net_ev caps 0.004) for resting at/near mid. The catch: fills occur precisely when informed flow crosses = adverse selection. Mid-band noise windows: win 30.8% at fill 0.487 → −0.365/$1 even fee-free+rebate (fill model optimistic, so upper bound). Only non-adverse fill is the favorite in over-round-tight calm windows (~breakeven). WALLED."},
-
-  // ---- tier 6 — execution & settlement outcome ----
-  {id:"entry-execution", title:"Entry / Execution", tier:6, layer:"execution", verdict:"open",
-   role:"Our trading rule: taker-cross the favorite (or maker-rest), then hold to resolution.",
-   equation:"fav_ask ∈ [0.95,0.99) + gate",
-   detail:"Favorite-tail base is NET-NEGATIVE (−0.0029 pooled, deflated p=1.0, 4/6 coins negative). Over-round gate lifts to +0.0065 but loss-light. Policy: taker-cross entry, maker-rest-at-target else hold-to-resolution (taker-exit is worst, fires on losers). The only OPEN execution corner = the over-round-gated / Chainlink-true-favorite entry; everything else walled."},
-  {id:"midround-exit", title:"Mid-round Exit (max-bid)", tier:6, layer:"execution", verdict:"walled",
-   role:"Sell mid-round at the highest favorite BID — value is not only hold-to-0/1.",
-   equation:"max(bid_t), t after entry",
-   detail:"The maker's 'mistake' includes the best price we could SELL at DURING the round, measured from the DB intra-round bid path (experiment_midround_exit.py). VALIDATED on favorite-tail 2026-06-28: clairvoyant peak-sell +0.0001 (barely beats hold −0.0051, ≈0) and every realizable maker-rest is WORSE (−0.006..−0.011) and adverse-selected (win|fill 0.98 vs win|nofill 0.95 — fills on the winners you'd hold to 1.0, fails on losers). A favorite's bid is capped near 1.0 so the upside is ~0.4¢; winners better HELD, losers' bids COLLAPSE before you can sell. Standing lens — matters MORE for non-favorite / mid-price entries (bigger transient swings)."},
-  {id:"settlement-outcome", title:"Settlement Outcome", tier:6, layer:"outcome", verdict:"closed",
-   role:"The binary resolution: Up if final Chainlink ≥ strike Chainlink.",
-   equation:"1[ final_CL ≥ strike_CL ]",
-   detail:"Deterministic at T=300 from the Chainlink snapshot vs the T=0 strike. Up token pays $1, Down $0 (or vice versa). The maker BELIEVES it settles here but PRICES on Binance — the ~3.6% of windows where Binance and Chainlink disagree on the winner is the basis-flip tail that dirties every boundary edge. Closed once final+strike observed."},
-  {id:"pnl", title:"Realized PnL", tier:6, layer:"outcome", verdict:"closed",
-   role:"Net profit/loss per dollar staked after all costs.",
-   equation:"won − entry − 0.07·(1−p)",
-   detail:"The terminal result. Favorite-tail −0.0029/$1 (deflated p=1.0); residual basket −0.092 (pays 2 taker fees); maker-noise −0.365 (adverse selection). VERDICT: no demonstrable retail edge — efficient-on-knowledge (Grossman-Stiglitz), fee-taxed where the edge would live, −100% binary skew. Only OPEN corners: settlement-residual + conditional-σ + over-round gate, all data-gated."},
+  {
+    "id": "real-crypto-value",
+    "title": "Real Crypto Value",
+    "tier": 1,
+    "layer": "exogenous",
+    "verdict": "exogenous",
+    "role": "The true economic spot price of BTC/ETH/etc — root driver of everything downstream.",
+    "equation": "S(t)",
+    "detail": "The fundamental asset value set by global supply/demand. We can neither observe it directly nor predict it; we only receive proxy feeds. The ultimate exogenous root of the chain."
+  },
+  {
+    "id": "vol-regime",
+    "title": "Volatility Regime",
+    "tier": 1,
+    "layer": "exogenous",
+    "verdict": "exogenous",
+    "role": "True realized spot volatility / risk-appetite state that drives the maker's σ input.",
+    "equation": "σ_real ≈ 27–58% ann. (~2× spread)",
+    "detail": "The actual price-movement risk over the window. The maker adaptive-tracks it (corr +0.74) but pads ~15% (VRP). Avg σ-error is self-priced/EV-neutral (WALLED), but a regime shift BEFORE the maker's σ updates is the untested conditional thread (see Conditional Sigma Lag). Exogenous root."
+  },
+  {
+    "id": "usdt-usd-basis",
+    "title": "USDT/USD Peg Basis",
+    "tier": 1,
+    "layer": "exogenous",
+    "verdict": "open",
+    "role": "Stablecoin denomination mismatch: maker prices in USDT, market settles in USD.",
+    "equation": "USDT − USD ≈ +16 bps",
+    "detail": "Tether trades ~0.16% rich vs USD. Because the basis is near-constant (~$100, std 3), it MOSTLY CANCELS in Up/Down outcomes (strike and final share the denomination). The non-cancelling RESIDUAL — USDT moving intra-window or near-strike flips — is the only un-measured corner and an OPEN frontier; data-gated on forward Chainlink accumulation."
+  },
+  {
+    "id": "binance-feed",
+    "title": "Binance Spot Feed (USDT)",
+    "tier": 2,
+    "layer": "feed",
+    "verdict": "observed",
+    "role": "The maker's ACTUAL price input (verified) and our fastest live proxy.",
+    "equation": "S_binance ≈ BTC/USDT",
+    "detail": "The maker prices off Binance: quote-fit R²=0.75 vs Pyth 0.0007; joint regression coef Binance +0.87 vs Pyth +0.01 (n=904k). This is its real input. But the market SETTLES on Chainlink, so the maker carries a structural input-feed error. We just read this feed; neutral plumbing."
+  },
+  {
+    "id": "chainlink-feed",
+    "title": "Chainlink Oracle (USD)",
+    "tier": 2,
+    "layer": "feed",
+    "verdict": "open",
+    "role": "The TRUE settlement reference — NOT used by the maker.",
+    "equation": "S_chainlink ≈ BTC/USD",
+    "detail": "Official resolution source. Public over WS (wss://ws-live-data.polymarket.com, topic crypto_prices_chainlink, ~1/s, no auth). The maker prices Binance but settles here = a STRUCTURAL input-error. ~16 bps basis mostly cancels; the residual + de-noised favorite selection is the OPEN frontier, needing weeks of forward data (collection began 2026-06-27)."
+  },
+  {
+    "id": "maker-input-mismatch",
+    "title": "Settlement Feed Mismatch",
+    "tier": 2,
+    "layer": "component",
+    "verdict": "open",
+    "role": "The core structural error: maker prices the wrong denominator vs settlement.",
+    "equation": "S_binance(USDT) − S_chainlink(USD)",
+    "detail": "THE program's highest-priority thread: the maker computes fair value on Binance/USDT but the market resolves on Chainlink/USD. We win not by beating its OUTPUT but by computing fair value on the TRUE oracle it ignores. The ~16 bps basis cancels at large margins; the residual + near-strike flips are where it could pay. OPEN, data-gated."
+  },
+  {
+    "id": "strike-price",
+    "title": "Strike Price",
+    "tier": 3,
+    "layer": "component",
+    "verdict": "closed",
+    "role": "Window entry boundary, frozen at open — deterministic.",
+    "equation": "K = S(t₀)",
+    "detail": "Fixed at market open; both maker and we read the same strike. No estimation error possible. Deterministic input to the maker's model; nothing to exploit here — except which feed sets it (Binance vs Chainlink), which routes into the mismatch."
+  },
+  {
+    "id": "time-to-settle",
+    "title": "Time to Settlement",
+    "tier": 3,
+    "layer": "component",
+    "verdict": "closed",
+    "role": "Deterministic clock countdown to expiry.",
+    "equation": "t = (300 − elapsed)/300",
+    "detail": "Pure 5-min countdown; both parties observe it identically. No component error possible — the maker has the same clock. Closed."
+  },
+  {
+    "id": "maker-sigma",
+    "title": "Maker Sigma (vol input)",
+    "tier": 3,
+    "layer": "component",
+    "verdict": "walled",
+    "role": "The maker's ONE free / estimated parameter.",
+    "equation": "σ_impl / σ_real ≈ 1.15",
+    "detail": "The maker's only place to be wrong. Tracks realized vol (corr +0.74) and pads ~15% as a Variance Risk Premium. The AVERAGE σ-error is self-priced / EV-neutral (the bot prices its own confidence) = WALLED; VRP-harvest was mined-out (loss-rate p=0.013 but EV p=0.30). Orthogonal to over-round (corr −0.03)."
+  },
+  {
+    "id": "conditional-sigma",
+    "title": "Conditional Sigma Lag",
+    "tier": 3,
+    "layer": "component",
+    "verdict": "walled",
+    "role": "Thread A — TESTED 2026-06-27 → DEAD (the priced latency-lag).",
+    "equation": "Δσ_real ≫ Δσ_impl  (lag τ)",
+    "detail": "Tested: does the maker's σ go STALE after a vol jump → favorite under-priced for flip risk? Looked alive (won~ask+staleness coef −0.41, perm-p 0.003, LOCO all-6) but the second-mind killed it: it decomposes to the recent-vol NUMERATOR not the implied-σ denominator (wrong sign), and IS the already-walled latency-lag — the coef vanishes/flips against a 15-20s-fresher ask (the maker has already marked losing favorites 0.96→0.61 by tl=10 = adverse selection). Loss-starved too (32-loser pool can't reach n_loss≥30; can't stack with over-round, Jaccard 0.58). The σ component is now fully CLOSED. dead_ends/experiment_sigma_lag.py; POSTMORTEM §1c."
+  },
+  {
+    "id": "moneyness",
+    "title": "Moneyness d",
+    "tier": 3,
+    "layer": "component",
+    "verdict": "closed",
+    "role": "In-the-money distance — the dominant fair-value driver.",
+    "equation": "d = ln(S/K) / (σ·√t)",
+    "detail": "Both parties compute this on the same Binance feed. Predicting future S is walled (the quote already prices recent trend; market efficient-on-knowledge). No edge in moneyness itself. Closed."
+  },
+  {
+    "id": "maker-fair-value",
+    "title": "Maker Fair-Value Engine",
+    "tier": 4,
+    "layer": "engine",
+    "verdict": "closed",
+    "role": "Digital-option pricing model — the maker's OUTPUT we cannot out-predict.",
+    "equation": "up_mid = Φ( ln(S/K)/(σ·√t) ),  R²=0.91",
+    "detail": "One synthetic-book bot per coin (Up/Down books are exact mirrors 75–81% of snapshots). Fits a Black-Scholes digital option at R²=0.91 (BTC/ETH/DOGE). This is the OUTPUT: it runs the right model on the same data we have, so directional/prediction strategies are walled by construction. Attack its INPUTS, never its output. Reconfirmed 2026-06-28: a principled drift-augmented FUTURE-value model (Φ with a near-trend drift term) adds NOTHING beyond this quote (drift coef collapses given the mid, corr with residual ~0, robust across a tl×window grid) — the maker already prices the near-trend, so its up_mid IS the best free real-time near-trend oracle → export it (Outcome 2), don't out-predict it."
+  },
+  {
+    "id": "over-round",
+    "title": "Over-Round (Spread)",
+    "tier": 4,
+    "layer": "engine",
+    "verdict": "open",
+    "role": "The maker's revealed confidence — its risk-overlay spread.",
+    "equation": "u_ask + d_ask − 1  (~1–2%)",
+    "detail": "Widens when the outcome is genuinely uncertain (corr +0.17 with |outcome−mid|). The over-round GATE (trade favorite-tail only when tight) PASSES the joint ask-control test the B-filter failed (over_round coef −0.358, z=−3.42, p=0.0006) and lifts favorite-tail to +0.0065/+0.0091. But loss-light (13 of 30 losers, CI [−0.009,+0.020] spans 0) → INSUFFICIENT. Strongest forward signal found; pre-registered, OPEN."
+  },
+  {
+    "id": "circuit-breaker",
+    "title": "Vol Circuit-Breaker",
+    "tier": 4,
+    "layer": "engine",
+    "verdict": "walled",
+    "role": "Risk defense: freeze / thin one side on fast informed flow.",
+    "equation": "re-quote only on >0.5c move",
+    "detail": "On vol spikes the maker freezes or lets one side thin (favored-side depth ~halves). DECISIVE kill: the one-sided moment is INFORMED CONTINUATION (signed forward mid +0.040 vs +0.005 baseline = 8×, only 28% revert). The bot is correctly defending against toxic flow. Taker leg fee-walled, maker leg adverse-selected. WALLED."
+  },
+  {
+    "id": "inventory-skew",
+    "title": "Inventory / Depth Skew",
+    "tier": 4,
+    "layer": "engine",
+    "verdict": "walled",
+    "role": "One-sided depth asymmetry — tested as a reversion seam.",
+    "equation": "bid/(bid+ask)",
+    "detail": "Depth one-sidedness ALWAYS predicts continuation (calm +0.093, spike +0.32), NEVER reversion — a calm one-sided book is priced momentum, not a reverting mistake. So providing liquidity on the abandoned side is adverse-selected at every condition. Lives in DEPTH not the mid (side field 59% noise). WALLED."
+  },
+  {
+    "id": "order-book",
+    "title": "Order Book (Up/Down)",
+    "tier": 5,
+    "layer": "book",
+    "verdict": "observed",
+    "role": "The observable CLOB quotes & depth we capture.",
+    "equation": "down ≈ mirror(up)",
+    "detail": "A single MM posts both books as exact mirrors (75–81%) — one synthetic book. We capture top-10 depth at 1/s plus sub-second book_events. Queue position is NOT observable, so fill probability must be MODELED (book_reconstruct.py validated 99.79% vs feed). Neutral plumbing; no edge in depth anomalies (they are informed continuation)."
+  },
+  {
+    "id": "taker-fee",
+    "title": "Taker Fee",
+    "tier": 6,
+    "layer": "cost",
+    "verdict": "closed",
+    "role": "The cost tax on every spread-cross — the binding gate.",
+    "equation": "0.07·(1−p)",
+    "detail": "VERIFIED live (feeds.fetch_fee_schedule: rate 0.07, takerOnly, exponent 1): ~0.2% at p=0.97 (cheap, favorite tail) to ~3.5% at p=0.5 (brutal, mid). Grossman-Stiglitz: Polymarket introduced it explicitly to neutralize latency arb = the fee IS the price of the edge. Any edge must clear it. Deterministic/closed."
+  },
+  {
+    "id": "maker-rebate",
+    "title": "Maker Rebate",
+    "tier": 6,
+    "layer": "cost",
+    "verdict": "walled",
+    "role": "Fee-free income for resting liquidity — capped & adverse-selected.",
+    "equation": "S = ((v−s)/v)²·b",
+    "detail": "Tiny rebate (net_ev caps 0.004) for resting at/near mid. The catch: fills occur precisely when informed flow crosses = adverse selection. Mid-band noise windows: win 30.8% at fill 0.487 → −0.365/$1 even fee-free+rebate (fill model optimistic, so upper bound). Only non-adverse fill is the favorite in over-round-tight calm windows (~breakeven). WALLED."
+  },
+  {
+    "id": "entry-execution",
+    "title": "Entry / Execution",
+    "tier": 7,
+    "layer": "execution",
+    "verdict": "open",
+    "role": "Our trading rule: taker-cross the favorite (or maker-rest), then hold to resolution.",
+    "equation": "fav_ask ∈ [0.95,0.99) + gate",
+    "detail": "Favorite-tail base is NET-NEGATIVE (−0.0029 pooled, deflated p=1.0, 4/6 coins negative). Over-round gate lifts to +0.0065 but loss-light. Policy: taker-cross entry, maker-rest-at-target else hold-to-resolution (taker-exit is worst, fires on losers). The only OPEN execution corner = the over-round-gated / Chainlink-true-favorite entry; everything else walled."
+  },
+  {
+    "id": "midround-exit",
+    "title": "Mid-round Exit (max-bid)",
+    "tier": 7,
+    "layer": "execution",
+    "verdict": "walled",
+    "role": "Sell mid-round at the highest favorite BID — value is not only hold-to-0/1.",
+    "equation": "max(bid_t), t after entry",
+    "detail": "The maker's 'mistake' includes the best price we could SELL at DURING the round, measured from the DB intra-round bid path (experiment_midround_exit.py). VALIDATED on favorite-tail 2026-06-28: clairvoyant peak-sell +0.0001 (barely beats hold −0.0051, ≈0) and every realizable maker-rest is WORSE (−0.006..−0.011) and adverse-selected (win|fill 0.98 vs win|nofill 0.95 — fills on the winners you'd hold to 1.0, fails on losers). A favorite's bid is capped near 1.0 so the upside is ~0.4¢; winners better HELD, losers' bids COLLAPSE before you can sell. Standing lens — matters MORE for non-favorite / mid-price entries (bigger transient swings)."
+  },
+  {
+    "id": "settlement-outcome",
+    "title": "Settlement Outcome",
+    "tier": 7,
+    "layer": "outcome",
+    "verdict": "closed",
+    "role": "The binary resolution: Up if final Chainlink ≥ strike Chainlink.",
+    "equation": "1[ final_CL ≥ strike_CL ]",
+    "detail": "Deterministic at T=300 from the Chainlink snapshot vs the T=0 strike. Up token pays $1, Down $0 (or vice versa). The maker BELIEVES it settles here but PRICES on Binance — the ~3.6% of windows where Binance and Chainlink disagree on the winner is the basis-flip tail that dirties every boundary edge. Closed once final+strike observed."
+  },
+  {
+    "id": "pnl",
+    "title": "Realized PnL",
+    "tier": 7,
+    "layer": "outcome",
+    "verdict": "closed",
+    "role": "Net profit/loss per dollar staked after all costs.",
+    "equation": "won − entry − 0.07·(1−p)",
+    "detail": "The terminal result. Favorite-tail −0.0029/$1 (deflated p=1.0); residual basket −0.092 (pays 2 taker fees); maker-noise −0.365 (adverse selection). VERDICT: no demonstrable retail edge — efficient-on-knowledge (Grossman-Stiglitz), fee-taxed where the edge would live, −100% binary skew. Only OPEN corners: settlement-residual + conditional-σ + over-round gate, all data-gated."
+  },
+  {
+    "id": "spot-orderflow",
+    "title": "Order-Flow Imbalance",
+    "tier": 0,
+    "layer": "force",
+    "verdict": "walled",
+    "role": "Signed Binance trade flow (aggTrades) — the mechanical cause of the spot move.",
+    "equation": "OFI = sum signed size",
+    "detail": "Free + sub-second, but it IS the cause of the move the maker follows in <1s off the SAME feed = the priced directional/continuation family (informed continuation, never reversion). The residual lead is the faster-feed edge (~+0.006/$1/s), spread+fee-capped to breakeven. We can know it; the maker already prices it."
+  },
+  {
+    "id": "liquidations",
+    "title": "Liquidation Cascades",
+    "tier": 0,
+    "layer": "force",
+    "verdict": "walled",
+    "role": "Forced-flow waves push spot directionally.",
+    "equation": "sum liquidated notional",
+    "detail": "Bybit/Binance liq streams are free, but a liq PRINTS at/after the forced fill already hit the book — spot (and the maker's quote) has moved. The cascade is informed continuation the maker's circuit-breaker defends. No public feed is faster than the exchange that printed it. Walled."
+  },
+  {
+    "id": "funding-oi",
+    "title": "Funding / Open Interest",
+    "tier": 0,
+    "layer": "force",
+    "verdict": "walled",
+    "role": "Leverage build/unwind = cascade-risk / vol regime.",
+    "equation": "funding_8h, dOI/dt",
+    "detail": "Funding updates every 8h, OI every 15s-1min — far too slow/coarse to predict a single 5-min window's DIRECTION, and the maker's sigma already tracks the resulting vol regime (corr +0.74). A vol-regime descriptor, not an outcome predictor."
+  },
+  {
+    "id": "perp-basis",
+    "title": "Perp-Spot Basis",
+    "tier": 0,
+    "layer": "force",
+    "verdict": "walled",
+    "role": "Leverage-pressure imprint in the perp premium.",
+    "equation": "P_perp - P_spot",
+    "detail": "Free real-time, but fast basis moves ARE spot moves the maker already prices, and the slow level is a known regime its sigma tracks. No component predicts the 5-min outcome orthogonal to current spot (the cross-asset/lead-lag family, already walled)."
+  },
+  {
+    "id": "cross-exchange",
+    "title": "Cross-Exchange Lead",
+    "tier": 0,
+    "layer": "force",
+    "verdict": "walled",
+    "role": "Which venue leads price discovery (Binance vs Coinbase/Bybit).",
+    "equation": "lead-lag(r_A, r_B)",
+    "detail": "All venue L2 is free, but the maker prices off Binance (the fastest venue) and settles on a multi-venue MEDIAN; a faster minor-venue tick is sub-second and the median ignores Binance-idiosyncratic moves. The faster-feed lead — real but spread/fee-capped. Walled."
+  },
+  {
+    "id": "news-events",
+    "title": "News / Macro Events",
+    "tier": 0,
+    "layer": "force",
+    "verdict": "walled",
+    "role": "Catalysts that spike vol (CPI/FOMC/outages); timing sometimes known.",
+    "equation": "1[shock or scheduled event]",
+    "detail": "Scrapers are 5-30s latent (by detection Binance has re-priced); scheduled events have KNOWN timing but UNKNOWN direction, and the post-print move is informed continuation the circuit-breaker defends. 'Vol will spike at 13:30' without direction is not an Up/Down edge. Latency+fee-walled."
+  },
+  {
+    "id": "whale-flow",
+    "title": "On-Chain Whale Flows",
+    "tier": 0,
+    "layer": "info",
+    "verdict": "walled",
+    "role": "Large transfers to exchanges (your whale-tracker sibling project).",
+    "equation": "whale-to-CEX notional / baseline",
+    "detail": "Data is in-hand and the maker is blind to on-chain logs — BUT deep-research REFUTED whale-flow-leads-price for crypto (election-only effect); a deposit-to-exchange is INTENT not timing, and the CEX execution lands minutes-to-hours later or never. Maker doesn't price it, but it doesn't predict the 5-min window either."
+  },
+  {
+    "id": "stablecoin-flow",
+    "title": "Stablecoin Mint/Burn",
+    "tier": 0,
+    "layer": "info",
+    "verdict": "walled",
+    "role": "Macro risk-on/off liquidity (USDT burn / USDC mint).",
+    "equation": "d(stable supply)/dt",
+    "detail": "Glassnode flows are free but 15min-1h latent and coarse — operate on a 15-60min horizon, far too slow to predict a single 5-min window. Wrong time-scale; by the time a mint registers the macro move is in spot."
+  },
+  {
+    "id": "options-gamma",
+    "title": "Options Dealer Gamma / Skew",
+    "tier": 0,
+    "layer": "info",
+    "verdict": "open",
+    "role": "Deribit IV skew & dealer positioning — the maker prices ATM vol, NOT skew.",
+    "equation": "25-delta risk-reversal; dealer gamma(K)",
+    "detail": "Free Deribit IV surface + per-strike OI = a structurally separate info set the maker does not use. HONEST CAVEAT: Deribit's shortest tenor is daily/weekly (not 5-min) and gamma-pinning evidence is for option-expiry clocks (08:00 UTC), not a random 5-min window — weak predictive link. LOW prior, but genuinely unseen by the maker."
+  },
+  {
+    "id": "realized-skew",
+    "title": "Conditional Return Skew",
+    "tier": 3,
+    "layer": "component",
+    "verdict": "open",
+    "role": "Empirical 3rd moment of 5-min returns — the maker's symmetric Phi assumes ZERO skew.",
+    "equation": "g = E[(r-mu)^3]/sigma^3 (regime-conditional)",
+    "detail": "5yr spot gives a CAUSAL conditional-skew estimate. The maker's driftless-Gaussian Phi is symmetric BY CONSTRUCTION, so in negative-skew (liquidation-prone) regimes the underdog-Down may be systematically UNDER-priced = a genuine MODEL-FORM error, orthogonal to the priced directional trend (the 1st moment). CAVEAT: the ~15% sigma-padding crudely absorbs SYMMETRIC tails; only the ASYMMETRIC (skew) part is attackable, and the fee is brutal at the p~0.3-0.5 underdog where skew lives."
+  },
+  {
+    "id": "model-form-residual",
+    "title": "Phi-vs-Empirical Residual",
+    "tier": 4,
+    "layer": "engine",
+    "verdict": "open",
+    "role": "Does the maker's Phi(d) leave a stable, regime-conditional calibration residual?",
+    "equation": "P_emp(Up | d, skew-regime) - up_mid",
+    "detail": "THE one open model-form question (the candidate the hierarchy expansion surfaced). The directional/drift residual is WHITE (drift adds nothing beyond the mid). The only untested axis = the asymmetric/skew TAIL: bin (moneyness x causal skew-regime) and test whether the empirical Up-frequency deviates STABLY from the maker's QUOTE (not from textbook Phi) at the underdog. LOW prior (Phi fits R2=0.91; VRP padding) but testable NOW on existing data, no new collection. Gate via stats.assess (n_loss>=30, deflated) + the joint-control (skew independent of mid AND priced trend) + second-mind."
+  }
 ];
 
 const EDGES = [
-  {from:"real-crypto-value", to:"binance-feed",   label:"observed as USDT quote"},
-  {from:"real-crypto-value", to:"chainlink-feed", label:"aggregated as USD oracle"},
-  {from:"usdt-usd-basis",    to:"binance-feed",   label:"USDT ~16 bps rich"},
-  {from:"usdt-usd-basis",    to:"chainlink-feed", label:"USD denomination"},
-  {from:"vol-regime",        to:"maker-sigma",       label:"drives σ (corr +0.74)"},
-  {from:"vol-regime",        to:"conditional-sigma", label:"regime break σ can lag"},
-
-  {from:"binance-feed",   to:"maker-input-mismatch", label:"maker's wrong-feed input"},
-  {from:"chainlink-feed", to:"maker-input-mismatch", label:"true oracle, unused"},
-  {from:"binance-feed",   to:"strike-price", label:"K = snap at t=0"},
-  {from:"binance-feed",   to:"moneyness",    label:"S in ln(S/K)"},
-  {from:"chainlink-feed", to:"settlement-outcome", label:"final vs strike snapshot"},
-  {from:"usdt-usd-basis", to:"settlement-outcome", label:"residual flips near strike"},
-  {from:"maker-input-mismatch", to:"settlement-outcome", label:"basis residual affects flip"},
-
-  {from:"strike-price",      to:"maker-fair-value", label:"K input"},
-  {from:"time-to-settle",    to:"maker-fair-value", label:"t input"},
-  {from:"maker-sigma",       to:"maker-fair-value", label:"σ input (+15% VRP)"},
-  {from:"conditional-sigma", to:"maker-sigma",      label:"stale σ when regime shifts"},
-  {from:"moneyness",         to:"maker-fair-value", label:"d = ln(S/K)/(σ√t)"},
-
-  {from:"maker-fair-value", to:"over-round",  label:"mid → spread overlay"},
-  {from:"maker-fair-value", to:"order-book",  label:"mid prices bid/ask"},
-  {from:"over-round",       to:"order-book",  label:"sets spread width"},
-  {from:"binance-feed",     to:"circuit-breaker", label:"fast spot move triggers"},
-  {from:"circuit-breaker",  to:"order-book",  label:"freezes / thins one side"},
-  {from:"inventory-skew",   to:"order-book",  label:"depth one-sidedness"},
-
-  {from:"order-book",        to:"entry-execution", label:"observable ask + depth"},
-  {from:"over-round",        to:"entry-execution", label:"gate: trade only when tight"},
-  {from:"conditional-sigma", to:"entry-execution", label:"underpriced-favorite signal"},
-  {from:"taker-fee",         to:"entry-execution", label:"cost 0.07(1−p) on cross"},
-  {from:"maker-rebate",      to:"entry-execution", label:"fee-free alt (adverse-selected)"},
-
-  {from:"entry-execution",    to:"pnl", label:"entry price locked"},
-  {from:"order-book",         to:"midround-exit", label:"intra-round bid path"},
-  {from:"midround-exit",      to:"pnl", label:"best realizable sell"},
-  {from:"settlement-outcome", to:"pnl", label:"won = 0 or 1 payout"},
+  {
+    "from": "real-crypto-value",
+    "to": "binance-feed",
+    "label": "observed as USDT quote"
+  },
+  {
+    "from": "real-crypto-value",
+    "to": "chainlink-feed",
+    "label": "aggregated as USD oracle"
+  },
+  {
+    "from": "usdt-usd-basis",
+    "to": "binance-feed",
+    "label": "USDT ~16 bps rich"
+  },
+  {
+    "from": "usdt-usd-basis",
+    "to": "chainlink-feed",
+    "label": "USD denomination"
+  },
+  {
+    "from": "vol-regime",
+    "to": "maker-sigma",
+    "label": "drives σ (corr +0.74)"
+  },
+  {
+    "from": "vol-regime",
+    "to": "conditional-sigma",
+    "label": "regime break σ can lag"
+  },
+  {
+    "from": "binance-feed",
+    "to": "maker-input-mismatch",
+    "label": "maker's wrong-feed input"
+  },
+  {
+    "from": "chainlink-feed",
+    "to": "maker-input-mismatch",
+    "label": "true oracle, unused"
+  },
+  {
+    "from": "binance-feed",
+    "to": "strike-price",
+    "label": "K = snap at t=0"
+  },
+  {
+    "from": "binance-feed",
+    "to": "moneyness",
+    "label": "S in ln(S/K)"
+  },
+  {
+    "from": "chainlink-feed",
+    "to": "settlement-outcome",
+    "label": "final vs strike snapshot"
+  },
+  {
+    "from": "usdt-usd-basis",
+    "to": "settlement-outcome",
+    "label": "residual flips near strike"
+  },
+  {
+    "from": "maker-input-mismatch",
+    "to": "settlement-outcome",
+    "label": "basis residual affects flip"
+  },
+  {
+    "from": "strike-price",
+    "to": "maker-fair-value",
+    "label": "K input"
+  },
+  {
+    "from": "time-to-settle",
+    "to": "maker-fair-value",
+    "label": "t input"
+  },
+  {
+    "from": "maker-sigma",
+    "to": "maker-fair-value",
+    "label": "σ input (+15% VRP)"
+  },
+  {
+    "from": "conditional-sigma",
+    "to": "maker-sigma",
+    "label": "stale σ when regime shifts"
+  },
+  {
+    "from": "moneyness",
+    "to": "maker-fair-value",
+    "label": "d = ln(S/K)/(σ√t)"
+  },
+  {
+    "from": "maker-fair-value",
+    "to": "over-round",
+    "label": "mid → spread overlay"
+  },
+  {
+    "from": "maker-fair-value",
+    "to": "order-book",
+    "label": "mid prices bid/ask"
+  },
+  {
+    "from": "over-round",
+    "to": "order-book",
+    "label": "sets spread width"
+  },
+  {
+    "from": "binance-feed",
+    "to": "circuit-breaker",
+    "label": "fast spot move triggers"
+  },
+  {
+    "from": "circuit-breaker",
+    "to": "order-book",
+    "label": "freezes / thins one side"
+  },
+  {
+    "from": "inventory-skew",
+    "to": "order-book",
+    "label": "depth one-sidedness"
+  },
+  {
+    "from": "order-book",
+    "to": "entry-execution",
+    "label": "observable ask + depth"
+  },
+  {
+    "from": "over-round",
+    "to": "entry-execution",
+    "label": "gate: trade only when tight"
+  },
+  {
+    "from": "conditional-sigma",
+    "to": "entry-execution",
+    "label": "underpriced-favorite signal"
+  },
+  {
+    "from": "taker-fee",
+    "to": "entry-execution",
+    "label": "cost 0.07(1−p) on cross"
+  },
+  {
+    "from": "maker-rebate",
+    "to": "entry-execution",
+    "label": "fee-free alt (adverse-selected)"
+  },
+  {
+    "from": "entry-execution",
+    "to": "pnl",
+    "label": "entry price locked"
+  },
+  {
+    "from": "order-book",
+    "to": "midround-exit",
+    "label": "intra-round bid path"
+  },
+  {
+    "from": "midround-exit",
+    "to": "pnl",
+    "label": "best realizable sell"
+  },
+  {
+    "from": "settlement-outcome",
+    "to": "pnl",
+    "label": "won = 0 or 1 payout"
+  },
+  {
+    "from": "spot-orderflow",
+    "to": "binance-feed",
+    "label": "drives spot (maker follows <1s)"
+  },
+  {
+    "from": "liquidations",
+    "to": "binance-feed",
+    "label": "forced flow (printed after)"
+  },
+  {
+    "from": "liquidations",
+    "to": "vol-regime",
+    "label": "cascades amplify vol"
+  },
+  {
+    "from": "funding-oi",
+    "to": "vol-regime",
+    "label": "leverage = cascade-risk regime"
+  },
+  {
+    "from": "perp-basis",
+    "to": "binance-feed",
+    "label": "basis moves are spot moves"
+  },
+  {
+    "from": "cross-exchange",
+    "to": "binance-feed",
+    "label": "venue lead is sub-second"
+  },
+  {
+    "from": "cross-exchange",
+    "to": "chainlink-feed",
+    "label": "minor venues enter the median"
+  },
+  {
+    "from": "news-events",
+    "to": "real-crypto-value",
+    "label": "exogenous shock (latent)"
+  },
+  {
+    "from": "whale-flow",
+    "to": "binance-feed",
+    "label": "deposit MAY precede exec (refuted)"
+  },
+  {
+    "from": "stablecoin-flow",
+    "to": "vol-regime",
+    "label": "macro liquidity (too slow)"
+  },
+  {
+    "from": "options-gamma",
+    "to": "realized-skew",
+    "label": "option skew forecasts realized skew"
+  },
+  {
+    "from": "options-gamma",
+    "to": "vol-regime",
+    "label": "dealer gamma biases near-term vol"
+  },
+  {
+    "from": "realized-skew",
+    "to": "model-form-residual",
+    "label": "zero-skew = model-form error"
+  },
+  {
+    "from": "maker-fair-value",
+    "to": "model-form-residual",
+    "label": "residual vs the quote"
+  },
+  {
+    "from": "model-form-residual",
+    "to": "entry-execution",
+    "label": "candidate: fade the mispriced underdog"
+  }
 ];
 
 const TIER_LABELS = [
-  {t:"Tier 0 — exogenous root drivers (the \"strings\")",      h:"play as HIGH as you can"},
-  {t:"Tier 1 — price feeds + the settlement-feed mismatch",   h:"maker prices Binance · settles Chainlink"},
-  {t:"Tier 2 — the maker's model INPUTS",                     h:"beat ONE of these = beat the maker"},
-  {t:"Tier 3 — the fair-value ENGINE (its output + overlays)", h:"do NOT out-predict the output"},
-  {t:"Tier 4 — the order book we observe",                    h:"prices + sizes · no queue visibility"},
-  {t:"Tier 5 — costs (the gate)",                             h:"the fee taxes where the edge would live"},
-  {t:"Tier 6 — execution & settlement outcome",               h:"−100%-skewed binary payoff"},
+  {
+    "t": "Tier 0 - upstream forces & what we could KNOW",
+    "h": "all public+fast -> already in spot -> walled"
+  },
+  {
+    "t": "Tier 1 - exogenous root drivers (the strings)",
+    "h": "play as HIGH as you can"
+  },
+  {
+    "t": "Tier 2 - price feeds + the settlement-feed mismatch",
+    "h": "maker prices Binance / settles Chainlink-median"
+  },
+  {
+    "t": "Tier 3 - the maker's model INPUTS",
+    "h": "beat ONE of these = beat the maker"
+  },
+  {
+    "t": "Tier 4 - the fair-value ENGINE (+ model-form residual)",
+    "h": "output is closed; the skew residual is the open seam"
+  },
+  {
+    "t": "Tier 5 - the order book we observe",
+    "h": "prices + sizes / no queue visibility"
+  },
+  {
+    "t": "Tier 6 - costs (the gate)",
+    "h": "the fee taxes where the edge would live"
+  },
+  {
+    "t": "Tier 7 - execution & settlement outcome",
+    "h": "-100%-skewed binary payoff"
+  }
 ];
 
 /* ===================== rendering / interaction engine ===================== */

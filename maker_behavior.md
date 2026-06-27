@@ -261,6 +261,38 @@ taker-exit; "selling escapes the fee" is false.)
 whole Polymarket trading chain (what affects what; height = how upstream/causal; click a node for its role +
 equation + our verdict). Edit the `NODES`/`EDGES` block at the top of that file to revise it.
 
+## 10. THE HIERARCHY EXPANSION — upstream & outward (2026-06-28)
+
+We expanded the chain map (`maker_chain.html`, now 33 nodes / 8 tiers) UPWARD into the **forces that actually move
+spot** and the **alt-data we could know**, plus a finer decomposition of the maker's **model form** — to find an
+unmapped node where we could outsmart the maker. A 3-lens workflow + adversarial prune.
+
+**VERDICT: expanding upstream did NOT open a new door — it confirms the wall is STRUCTURAL.** Every upstream
+force is **public + fast → already in Binance spot → already in the maker's quote within ~1s**, so each is the
+walled directional / lead-lag / microstructure family in new clothes (settled by the faster-feed result: real
+~+0.006/$1/s lead, spread+fee-capped). The new top tier of the map is therefore almost entirely RED:
+- **order-flow imbalance, liquidation cascades, perp-spot basis, funding/OI, cross-exchange lead, news/macro
+  events** — all WALLED (public+fast → in spot → priced; or too slow/coarse for a 5-min window).
+- **whale on-chain flows** (your sibling tracker) — maker is blind to it, but deep-research REFUTED
+  whale-flow-leads-price for crypto (deposit = intent, not 5-min timing). **stablecoin mint/burn** — 15-60min
+  horizon, too slow.
+
+**Only TWO nodes survive the "we can know it AND the maker doesn't already price it" filter:**
+1. **Settlement-oracle divergence = Thread B** — the one already-open, already-built thread (`experiment_settlement_basis.py`),
+   data-gated. Medium prior.
+2. **THE one NEW lead — a model-FORM error (`model-form-residual` / `realized-skew` nodes).** The maker's quote is
+   `Φ(d)` — a **symmetric, driftless Gaussian** — so it **cannot encode conditional return SKEW**. In negative-skew
+   (liquidation-prone) regimes the **underdog-Down may be systematically under-priced** — a model-form error
+   **orthogonal to the priced directional trend** (3rd moment, not 1st), which is exactly why it could survive
+   where drift/trend died. **Testable NOW on existing data** (5yr spot for a causal skew regime + our resolved
+   windows), **LOW prior** (the ~15% σ-padding absorbs SYMMETRIC tails; the fee is brutal at the p≈0.3-0.5
+   underdog price where skew lives). The decisive test: bin (moneyness × causal skew-regime), residual =
+   empirical-Up-freq − the maker's QUOTE, joint-control (skew independent of the mid AND the priced trend),
+   gate via `stats.assess` (n_loss≥30, deflated) + second-mind.
+
+**So the expansion produced one concrete, on-existing-data candidate (the skew/model-form residual) and otherwise
+hardened the wall.** Bottom line unchanged: on-market, only Thread B (data-gated) + this low-prior skew seam.
+
 ## One-paragraph summary
 
 We trade against a single, competent, automated fair-value market-maker per coin that prices each token as a
