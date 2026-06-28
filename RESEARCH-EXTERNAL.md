@@ -317,3 +317,55 @@ FLB **sign objection** (the skew seam only lives in regime-reversed negative-ske
 makes that sign unstable = the make-or-break risk); (c) Field B gives the τ^{−0.4} reason the skew term is maximal at
 5 min = the strongest argument the seam is non-trivial. **Next:** ONE honest Phase-2 build of the skew residual (low
 prior, expect priced-by-σ-padding or fee-capped), Thread B stays the patient data-gated bet.
+
+**PHASE 2 RESULT (2026-06-28):** the skew residual is **DEAD** — the maker prices the skew (n_loss=412 = a real
+verdict; moment coef +0.002, net-EV FAILS deflated p=1.0; robust whiff is BTC-only/coin-incoherent/fee-capped;
+second-mind 0/40 deflated grid cells survive). See POSTMORTEM §1d / `dead_ends/experiment_skew_residual.py`.
+
+---
+
+# PHASE 3 — "Play a DIFFERENT GAME": how people ACTUALLY beat opponents like our maker — 2026-06-28
+
+User reframe: we keep trying to out-RUN Usain Bolt (beat the maker at pricing the digital) and always lose because it
+does the basics better; the winners "drive a car" = change the GAME. A 10-agent workflow (6 research angles +
+2 surviving adversarial skeptics [different-game + accessibility lenses; the evidence-skeptic agent failed the schema]
++ synthesis, ~822k tokens) researched documented winners against analogous opponents and mapped each to our position.
+
+**THE FINDING (validates the reframe):** EVERY documented winner against a sharp opponent changed the GAME —
+role / information / scale / instrument / venue / fee-structure — and **NONE won by out-pricing a fast public-data
+maker** (the exact game we keep losing). Benter (HK racing): a model BUT the edge was PRIVATE data + blending the
+public odds as a feature + pool scale (R²=0.1245 model alone → 0.1396 only after adding public odds). Jane St/SIG/
+Optiver: market-MAKING + structural-flow capture, not prediction. Medallion: 50.75% hit-rate × 150k tiny uncorrelated
+trades/day, capacity-capped, execution mastery. Théo ($80–85M on Trump): commissioned private YouGov polls.
+Starlizard/Smartodds: a data moat + syndicate scale + closing-line value. Betfair scalpers (Webb >£1M, Berry vetted
+>£100k): they BECOME the bookmaker — and Betfair's Premium Charge taxing the winning 0.3–0.7% is hard proof the
+maker role persistently wins on the right venue. Kalshi (300k contracts): makers lose −10% vs takers −32% — the role
+flip is worth ~22 points but is STILL net-negative un-subsidized, and only favorites pay.
+
+**THE VERDICT for US (honest):** there is **NO retail different-game on THIS specific 5-min product** — it is the
+uniquely hostile case: SINGLE-venue (no identical contract to arb), UNFUNDED (maker earns no rebate, adverse-selected
+−0.365/$1 — `experiment_maker_noise.py`, `feeds.fetch_rewards` rates=None), BORN-MATURE (an always-present R²=0.91
+Φ-maker, no thin-market window), and DETERMINISTICALLY settled on a public Chainlink price (no information or
+settlement edge; settlement-basis already killed). But this is "**closed for US on this product**," not "closed for
+everyone" — the same skill set has escape routes that fit a small account, and **they all require changing the
+PRODUCT, not the tactic.**
+
+**Ranked candidate "different games" (3-skeptic-rated; available = to a small 1s-polling retail account):**
+
+| # | different game | avail | tried? | verdict |
+|---|---|---|---|---|
+| **1** | **Delta-neutral funding-rate / cash-and-carry CARRY** (hold spot, short the perp, collect funding) | **YES** | **NO (never)** | The ONLY approach BOTH skeptics rate REAL_AND_APPLICABLE. True change of role+instrument+venue: you become the house the over-leveraged-long crowd overpays; the fee becomes a cash flow you COLLECT, no maker to out-price; slow 8h/1h clock (no latency needed); reuses `coins.py` per-coin polling + a public funding feed. **Honest:** compressed to single-digit APY (BTC basis 25%→4.5%, 93% of days < ~5% breakeven) + liquidation/short-squeeze/exchange-counterparty risk = a steady carry, not a windfall. **This lives entirely OFF Polymarket.** |
+| **2** | **Favorite-longshot REVERSAL on LONGER-HORIZON Polymarket markets** (buy cheap favorites, hold) | PARTIAL | PARTIAL (only on 5-min, where it's net-neg) | The most robust documented prediction-market bias, but it lives on LESS-efficient longer-dated markets (politics/sports/longer crypto), NOT our well-calibrated 5-min clock. Reuses our CLOB plumbing + `stats.assess`. Thin, selection-sensitive (84% of PM wallets lose). Off the 5-min clock. |
+| **3** | **DOV-style NON-TOXIC-FLOW-conditioned maker gate** (sell as maker only in clock buckets where taker flow doesn't predict won−mid) | PARTIAL | NO (naive maker tried → −0.365) | The ONE genuinely-new idea that lives ON our 5-min data, a pure `stats.assess` experiment on data we already store. LOW prior (near-expiry toxic + unfunded = no rebate to pad the tail), but un-run as a conditioned cell and cheap to test once. |
+| **4** | **Maker rebate + liquidity-rewards on adjacent FUNDED markets** (scan `feeds.fetch_rewards` for funded pools, quote there) | PARTIAL | YES on our product (dead) | Real & retail-reachable on FUNDED markets, but a decaying subsidy (~10% APY ceiling) needing a maker bot + sustained two-sided-quoting capital. A different product. |
+| 5 | Benter residual-blend / breadth (IR=IC·√breadth) / capacity / execution mastery | — | YES (it's our standing policy) | These are DISCIPLINES we already enforce (= why we keep correctly finding no edge). 0×N=0; our 6 coins ~0.6 corr ≈ one bet. Routes back to "change the product." |
+| 6–8 | Cross-venue arb / PFOF; copy on-chain sharps / airdrop farming; settlement-dispute / dispersion / GEX | NO | n/a / walled | HFT/capital/license-only, or survivorship/marketing, or structurally absent on our deterministic public-price binary. |
+
+**HONEST RECOMMENDATION:** the cleanest "fly a plane" move is **#1 — a Stage-1, NO-CAPITAL measurement of
+delta-neutral funding carry** on the Binance feed we already poll (log per-coin funding + spot-perp basis, measure
+persistence + net-of-fee carry over weeks, gate before any capital). It's the single approach both skeptics
+independently rate fully applicable and the repo has literally never touched (every `experiment_*.py` is on the
+walled 5-min binary). Secondary: favorite-reversal on longer-horizon Polymarket; tertiary: the one-shot non-toxic-flow
+maker-gate test on data we already have. **Bottom line:** keep re-pricing the 5-min digital and we keep losing to
+Bolt; the realistic shot requires pivoting the infrastructure to one of these adjacent games. (Full agent JSON:
+session task `w1ya0ds3p`.)
