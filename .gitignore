@@ -36,3 +36,6 @@ round_reviews/*.png
 spike_reversion.png
 *.out
 paper_nested_trades.csv
+
+# correlation-lab output graphs (regenerate via correlation_lab.py)
+correlation_lab/
