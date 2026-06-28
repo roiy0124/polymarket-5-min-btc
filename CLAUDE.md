@@ -58,6 +58,28 @@ Durable tooling already built for this (reuse, don't reinvent): `analysis/stats.
 candidate + joint-control + adaptive + monitor). See the "Research state" section below for what is already
 WALLED (don't re-run) vs the live candidates.
 
+### SKILLS & WORKFLOWS — invoke these AUTOMATICALLY (built 2026-06-28, memory `quant-skills-and-workflows`)
+
+These encode the standing method above. **Use them by default for the matching task — no need for the user to ask.**
+
+- **`quant` skill** (`~/.claude/skills/quant`, global, auto-loads) — the THINKING/judgment of a pro quant: how to
+  DISCOVER, CRITIQUE, and not fool yourself. **Invoke for ANY strategy/idea/signal/edge/"is this real?" work** — it
+  carries the operating procedure, the mental models, the discovery front-end (forces-not-parameters, the scouting
+  checklist, the idea-generation prompts), the trap catalog, and `05-battle-scars` = the KILL-LIST (re-query it
+  FIRST to set the prior before testing anything). Pairs with `trading-strategy-knowledge` (domain facts).
+- **`data-detective` skill** (`~/.claude/skills/data-detective`, global) — the craft of drawing HONEST conclusions
+  from data (provenance/artifacts/measurement/conclusion). **Invoke whenever analyzing a dataset or judging whether
+  a pattern is real vs an artifact** (look-ahead, survivorship, Simpson's, multiplicity, alignment).
+- **`second-mind` workflow** (`Workflow({name:"second-mind", args:"<finding+numbers>"})`) — the MANDATORY adversarial
+  refutation. **Run on EVERY positive result before believing it** (5 diverse kill-lenses → majority-refute = KILL).
+- **`vet-idea` workflow** (`Workflow({name:"vet-idea", args:"<the idea>"})`) — the operating procedure on a candidate
+  IDEA → PURSUE / KILL-ON-PRIORS / PARK + a pre-registration card. Use before building anything for a new idea.
+- **`scout-opportunity` workflow** (`Workflow({name:"scout-opportunity", args:"<market/venue>"})`) — opponent-first
+  recon of a NEW market/venue before sinking effort in.
+
+Default flow for a new idea: re-query the kill-list (`quant` `05-battle-scars`) → if walled-family with no
+structural difference, KILL-ON-PRIORS; else `vet-idea` → cheapest measurement → `second-mind` on any positive.
+
 ## Architecture: HYBRID (WebSocket primary + REST fallback)
 
 A deep-research pass (see memory `btc-updown-data-reliability`) established that
