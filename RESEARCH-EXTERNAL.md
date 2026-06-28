@@ -369,3 +369,67 @@ walled 5-min binary). Secondary: favorite-reversal on longer-horizon Polymarket;
 maker-gate test on data we already have. **Bottom line:** keep re-pricing the 5-min digital and we keep losing to
 Bolt; the realistic shot requires pivoting the infrastructure to one of these adjacent games. (Full agent JSON:
 session task `w1ya0ds3p`.)
+
+---
+
+# PHASE 4 — OPPONENT-FIRST recon: "scatter for WEAK OPPONENTS" — 2026-06-28
+
+User principle: don't strategy-first (pick a bot, hunt a market); OPPONENT-first — scout for a pond where the Bolt is
+weak/absent/too-big-to-fit, THEN build the bot. 9-agent workflow (6 scouts + accessibility skeptic [the hidden-Bolt
+skeptic failed the schema — I added that skepticism by hand] + synthesis, ~814k tokens). The test for every pond:
+where's the money from (sharp's mistake=Bolt; risk-premium/subsidy/biased-crowd=maybe none); what's the winning axis
+(speed/capital/info=we lose; patience/risk-mgmt/being-small=we can win); is the opponent PREDATORY (profits from your
+trade=fatal) or merely COMPRESSIVE (lowers your return=survivable). Agent JSON: session task `w0m84z9ph`.
+
+### Ranked pond map (best weak-opponent + reachable first)
+| # | pond | opponent | money | pred/comp | reach | the demon |
+|---|---|---|---|---|---|---|
+| **1** | **Kalshi favorite-longshot fade** — resting MAKER buys favorites (≥0.80–0.90) on many thin, objectively-resolved non-crypto event markets, hold to resolution | **WEAK** (biased lottery-seeking retail; the sharp odds-compiler is at the sportsbook, not in this book) | behavioral-bias | NON-ADVERSARIAL | **YES** | bias DECAY (Kalshi ψ 0.048→0.021 ′24→′25) + resting-fill adverse selection (+1.9% is an UPPER bound) + −100% upset skew (needs wide diversification) |
+| 2 | Slow **COMBINATORIAL** cross-market arb on Polymarket (sum-of-asks<$1), the ~16s-persistence subset only | MEDIUM (only other small bots) | arbitrage | COMPRESSIVE | PARTIAL | LEGGING + ~$15/episode throughput (a trickle) + UMA-resolution tail; single-market (3.6s) variant is HFT-only |
+| 3 | Cross-platform **Kalshi-vs-Polymarket** same-event arb (pre-fund both) | MEDIUM (funding-lag binds pros too) | arbitrage | COMPRESSIVE | PARTIAL | **SETTLEMENT-DIVERGENCE** (identical-looking events resolve oppositely → a 3¢ lock becomes −100%) + dual-venue capital |
+| 4 | **Funding/cash-and-carry basis carry** (delta-neutral, fixed hurdle) | WEAK–MED (leveraged longs pay; other carry desks only compress) | risk-premium | COMPRESSIVE | PARTIAL | liquidation/custody/basis-blowout + **compressed near-dry mid-2026** (coverage may be <20% = sit out) |
+| 5 | **Kalshi LIP subsidy** farming on low-vol niche markets (resting two-sided) | MEDIUM | subsidy ($10–1000/mkt/day) | COMPRESSIVE+adverse-fill layer | YES-to-reach | adverse-selection on fills + subsidy ends Sep-1-2026 + illiquidity-exit |
+| 6 | **Hyperliquid HLP / Ethena sUSDe** carry baskets (be the house / hold a token; bot = risk overlay only) | WEAK | risk-premium | NON-ADVERSARIAL | PARTIAL | smart-contract/custody + 4-day lockup + funding-FLIP + depeg |
+| — | **DEMOTED hidden Bolts / un-exitable:** Polymarket maker-rewards (= our walled −0.365 corner), single-market Dutch-book (3.6s=HFT), Polymarket-leads-Kalshi lead-lag, Kalshi WEATHER (forecast-bots), stablecoin micro-arb, new-listing sniping, micro-cap perp MM/LP, brand-new thin/entertainment contracts, Betfair (Premium-Charge taxes winners) | STRONG_BOLT | — | PREDATORY | NO | the opponent IS the demon |
+
+### THE DURABLE TOOL — the SCOUTING CHECKLIST (measure opponent-strength on ANY market before committing)
+Run these BEFORE building anything. **Signature 5 alone would have flagged the 5-min crypto MM as walled on day one.**
+1. **Sig 5 — fair-value-MM detector (GO/NO-GO, run first):** regress market mid on a cheap public fair-value reference
+   (crypto: BS-digital from spot+time; events: a public model / another book). **R²<~0.6 + quotes lagging by seconds +
+   lumpy one-sided = NO fair-value MM = pond OPEN. R²>~0.85 + tight 2-sided + sub-1s re-quote = MM is HOME = WALLED.**
+2. **Sig 7 — dislocation half-life:** timestamp-diff each dislocation in replayed `book_events`, re-simulate entry at
+   +1s lag. WEAK/reachable = median duration ≫ our latency (>~5–10s); BOLT = <1–2s (HFT/atomic). (Persistent often =
+   size-capped → pair with a depth check.)
+3. **Sig 3 — fill TOXICITY markout (the key predatory-vs-compressive test):** markout(N)=dir·(mid_{t+N}−fill) for
+   N∈{1s,5s,30s,resolution}. Flat/positive = uninformed = COMPRESSIVE/safe; negative-and-DEEPENING = informed =
+   PREDATORY Bolt (the −0.365 scar). Broad markets ~2× less toxic than single-name.
+4. **Sig 1 — spread decomposition (Hasbrouck):** effective = realized_spread (MM margin) + price_impact (adverse sel).
+   WEAK = realized wide (>150–400bps) AND price_impact/effective<~0.3 AND quote_age>seconds. BOLT = price_impact/eff
+   >0.5 OR re-quote <1s. **Width alone is ambiguous — decompose.**
+5. **Sig 4 — calibration / FLB reliability diagram (behavioral-crowd detector):** bin resolved contracts by price,
+   realized win-rate per bin + ECE. WEAK = stable miscalibration at the EXTREMES that **survives the TOP volume
+   quintile**; BOLT = near-diagonal on the liquid flagship. Edge lives where −100% skew + fee bite hardest → charge `net_ev`.
+6. **Sig 2 — variance ratio (Lo-MacKinlay):** VR(q) on the MID. VR=1 (Zq* insig) = random walk = a sharp enforces it =
+   WALLED; |VR−1| sig = predictable structure; AR(1) half-life = tradeable horizon. (Compute on mid, not trade price.)
+7. **Sig 6 — order-flow composition (VPIN):** low/stable VPIN (<~0.3) + round-number sizes + human cadence = retail =
+   soft; sustained >0.4–0.6 + bot cadence = toxic. Use as a RELATIVE rank, not a trigger.
+8. **TERMINATING GATE (repo policy):** route realized (won−price)/net-EV through `analysis/stats.assess` — deflated
+   cluster-bootstrap p<0.05 AND cluster-CI excl 0 AND **n_loss≥30** (else INSUFFICIENT), charging the fee + −100% skew;
+   THEN the decisive confound control — joint logistic of the residual vs the obvious priced/sharp variable (closing
+   line, alt-own move). **If that variable already explains it, the edge is priced and you're just slow = ABORT.**
+
+### Top recommendation + the honest read
+**#1 = Kalshi FLB**, the only pond both lenses agree is genuinely weak-opponent AND reachable AND — uniquely —
+**confirmable for FREE on resolved history BEFORE risking a cent**, with a fee-free hold-to-resolution exit so the
+illiquidity demon never forces an unwind. **First scout step (NO CAPITAL):** pull Kalshi's free resolved-market history
+→ SQLite (mirror the collector pattern) → reliability diagram per category (Sig 4) → route (won−price) through
+`stats.assess` net of the 25% maker fee, event-clustered, deflated, n_loss≥30 in the favorite band. **THREE gates must
+ALL pass:** (a) positive favorite-band residual; (b) **survives the TOP volume quintile** (else it's just illiquidity);
+(c) **independent of the sharp closing line** in a joint logistic (else priced/slow = ABORT).
+**Honest caveats:** (1) NOTHING here is validated — leads only; every headline figure is gross/vendor-sourced. (2) Kalshi
+FLB is the SAME SHAPE as our walled 5-min favorite-tail; the ONLY structural difference is the counterparty is biased
+retail not a fair-value MM — the joint-logistic-vs-sharp-line control is what decides it. (3) it's DECAYING +
+adverse-selected (+1.9% is an upper bound). (4) "too small for sharks" usually also = "too thin to exit." **(5)
+JURISDICTION (my add, not in the agents): Kalshi is US-CFTC-regulated, generally US-persons-only; Polymarket restricts
+US persons — so which venue's FLB is reachable is gated by the user's jurisdiction, a first-order access question the
+recon didn't check.**
