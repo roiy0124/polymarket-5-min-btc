@@ -433,3 +433,22 @@ adverse-selected (+1.9% is an upper bound). (4) "too small for sharks" usually a
 JURISDICTION (my add, not in the agents): Kalshi is US-CFTC-regulated, generally US-persons-only; Polymarket restricts
 US persons — so which venue's FLB is reachable is gated by the user's jurisdiction, a first-order access question the
 recon didn't check.**
+
+### NO-CAPITAL FIRST STEP — measured the Polymarket FLB pond → ABORT (2026-06-28)
+User trades Polymarket (non-invasive, crypto-funded; Kalshi needs full US KYC → out). Built `scout_flb.py` and pulled
+**1384 resolved binary non-crypto Polymarket markets**, each YES contract's price 24h before resolution (causal) →
+the favorite-longshot reliability diagram + the 3 kill-gates. **Result: ABORT — but a clean demonstration of the
+process.** The FLB tilt is REAL (textbook curve: longshots overpriced −0.077, favorites underpriced +0.11..+0.26),
+and the favorite band's RAW signal is the strongest this project has ever produced: **+0.080 residual, win 97.7% vs
+90.3% breakeven, raw cluster-p=0.006, CI excl 0.** It dies on THREE independent disqualifiers:
+- **(a) LOSS-LIGHT** — n_loss=3 in the favorite band → INSUFFICIENT (the exact degenerate-CI trap that killed the
+  5-min favorite-tail; top-volume quintile n_loss=0). Can't confirm +0.08 isn't noise.
+- **(c) SHARP-CONVERGENCE COLLAPSE (decisive)** — residual +0.080 at 24h → **+0.0015 at the market's own 1h price**
+  (robust ex-FDV-markets: +0.073 → +0.0018). Favorites are CALIBRATED at the sharp/late price; the 24h "edge" is the
+  price drifting up as resolution nears (informational latency), not a standing crowd bias a maker could harvest.
+- **(+) LOOK-AHEAD** — entry anchored on `closedTime`, outcome-dependent for early-resolving markets, inflates the raw
+  24h residual. Gate (c) is immune (it only makes 24h look *better*), which is why it's decisive.
+**The new process WORKED exactly as designed**: it caught a seductive +0.08 / 97.7%-win / p=0.006 false positive for
+FREE in ~1h with zero capital — the same loss-light + efficiency-at-the-sharp-horizon wall, found cheaply instead of
+after a year + real money. The FLB bias *exists* but is priced at the sharp horizon = walled for a harvester. `scout_flb.py`
++ the scouting checklist stay as durable tools; next pond on the checklist = the slow combinatorial Polymarket arb.
