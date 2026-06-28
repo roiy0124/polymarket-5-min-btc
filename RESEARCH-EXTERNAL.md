@@ -452,3 +452,57 @@ and the favorite band's RAW signal is the strongest this project has ever produc
 FREE in ~1h with zero capital — the same loss-light + efficiency-at-the-sharp-horizon wall, found cheaply instead of
 after a year + real money. The FLB bias *exists* but is priced at the sharp horizon = walled for a harvester. `scout_flb.py`
 + the scouting checklist stay as durable tools; next pond on the checklist = the slow combinatorial Polymarket arb.
+
+---
+
+# PHASE 5 — PREMIUM-HARVEST landscape ("be the house"), custody-centered — 2026-06-28
+
+Decision: pivot from hunting a predictive edge to PREMIUM games — get paid to bear a MANAGED risk, not to out-predict.
+Two hard user constraints: NON-INVASIVE (no heavy KYC → self-custodial on-chain venues, not KYC'd CEXs) and the
+CUSTODY/COUNTERPARTY ("nostro") risk as the central demon. 9-agent workflow (5 premium-class scouts + a custody-
+framework agent + custody-safety skeptic [premium-reality skeptic failed the schema; covered by scouts' honest notes]
++ synthesis, ~713k tokens). Agent JSON: session task `wbu4cu4x9`.
+
+### Ranked menu (self-custody + no-KYC + survivable-tail filtered; best first)
+| # | option | net APY (mid-2026, honest) | custody | KYC | the tail |
+|---|---|---|---|---|---|
+| **1** | **Hyperliquid HLP vault** (deposit USDC = be the house: MM spread + liquidations + funding) | **~10–15% real** (NOT 22% headline; all PnL, no emissions) — but **NOT delta-neutral**: directional inventory | SELF-CUSTODIAL on-chain (operator can't touch it; 4-day lockup exit) | NONE | JELLY-style vault squeeze (−27% intraday Mar-2025, rescued only by a **discretionary** validator vote); 4-day lock = can't flee |
+| **2** | **Uniswap v3 STABLECOIN LP** (USDC/USDT tight range, on an L2) | ~3–10% real fee income (IL≈0; the most honest number on the menu) | SELF-CUSTODIAL (LP NFT in your wallet, withdraw anytime) | NONE | stablecoin DEPEG converts you fully into the broken coin |
+| 3 | On-chain stablecoin supply (Sky SSR/sUSDS, Aave/Morpho USDC) | ~3.6–8% (compressed to ≈ T-bill) | SMART-CONTRACT vault | NONE | utilization-FREEZE / contagion (Apr-2026 KelpDAO→Aave: couldn't withdraw for days, Aave never hacked) |
+| 4 | **Ethena sUSDe** (packaged delta-neutral basis) | ~3.7–3.9% (down from 27%) | **MIXED — hedge sits at CEX/OES custodians** → re-imports the nostro demon | LIGHT | funding-flip → yield→0; venue-local depeg ($0.62 print Oct-2025) |
+| 5 | **Hyperliquid manual delta-neutral funding carry** (the bot we'd build) | **~3–6%, FREQUENTLY ~0 or NEGATIVE** in 2026 (BTC funding ran negative 46 straight days through Apr) | SELF-CUSTODIAL on-chain | NONE | funding-flip (dominant), short-leg liquidation; a spike-harvester, not an income engine right now |
+| — | **REJECTED:** Deribit option-selling / CEX "Earn" / income-ETFs (FULL KYC + opaque custody = hard fail); Thetanuts/$NUTS DOVs, dYdX/Curve token-reward LP (emission mirages, $NUTS ~$0.001); GMX V2 (live $42M V1-hack history) |
+
+### THE DURABLE TOOL — the NOSTRO / custody risk framework (how to not get FTX'd)
+1. **Self-custody by default** — smart contract (not a company) holds collateral, reserves = the verifiable on-chain
+   balance, withdrawal is a permissionless tx. Any company-custodied venue = a temporary, sized, withdraw-promptly bucket.
+2. **Three DISTINCT failure modes** — smart-contract vs counterparty/custody vs bridge risk; write down which dominates
+   per venue+route; minimize bridge hops (hold collateral native to the chain you trade on).
+3. **Size for single-venue total loss** — cap any one venue/contract at ~15–25%; run the same play across 2–3 venues;
+   keep the bulk in cold storage; SWEEP profit out of the earning venue on a schedule.
+4. **PoR ≠ solvency; withdrawal IS the test** — a Merkle PoR hides liabilities; the moment a venue gates/pauses
+   withdrawals = assume insolvency. Run periodic small test-withdrawals; any friction = pull everything.
+5. **Separate hot/cold + trade-keys from withdraw-keys** — bots use trade-only agent/API wallets (no withdrawal rights);
+   hardware wallet holds the reserve and signs withdrawals manually; never paste a seed phrase.
+6. **Harvest only STRUCTURAL premia** — name WHO pays it and WHY (longs pay funding, buyers overpay insurance, borrowers
+   pay borrow demand). "The protocol emits its token" = marketing (value the token at live spot, model only the fee slice).
+   Terra/Anchor's 19.5% had no real payer → −$45B in a week.
+7. **Size the tail explicitly** — every premium is SHORT a specific catastrophe (funding-flip/liquidation/squeeze/depeg/
+   freeze/hack/slashing) = short-vol, the SAME −100% binary skew our work already respects. Pre-commit a max loss + auto
+   de-risk trigger per position; gate rules through `stats.assess` (n_loss≥30) so the gap months are in-sample.
+8. **Distrust discretionary backstops** — HLP's JELLY rescue was luck (a validator vote + foundation make-whole), not a
+   contract term. Never size on "they'll make me whole."
+
+### The honest verdict
+**The realistic machine = a small BARBELL: ~10–15% self-custodial HLP "be-the-house" sleeve (capped ~15–20%) + a boring
+~3–10% Uniswap v3 stablecoin-LP core, cold-stored bulk swept out → blended HIGH-SINGLE-DIGIT net APY with managed
+double-digit drawdown on the HLP sleeve. That's it.** The dominant fact of mid-2026 is COMPRESSION: the once-fat
+funding/basis/vol premia have fallen to **≈ the T-bill rate or gone negative** (sUSDe 27%→3.8%; funding negative 46
+straight days; staking/SSR ≤ ~4.5% T-bills; DeFi TVL −39% YoY). Self-custody **trades one demon for another** (CEX
+counterparty → live smart-contract risk: GMX $42M, Thetanuts $2.1M-despite-audits, the Aave freeze), it does not remove
+risk. **The class is short-vol/negative-skew** — calm-tape backtests look great and blow up in the tail. **First move
+= ZERO capital:** build a free read-only HLP-NAV + funding monitor on our existing stdlib-HTTP+SQLite plumbing, run it
+2–4 weeks, gate persistence + drawdown through `stats.assess`, and dry-run the self-custody + trade-only-wallet +
+test-withdrawal flow BEFORE any deposit. **If it doesn't clearly beat a tokenized T-bill net of effort and tail — hold
+the T-bill.** (premium-reality skeptic agent failed; treat every "REAL" label as provisional until the live-data
+persistence gate confirms it — which is exactly the no-capital first step.)
