@@ -472,20 +472,20 @@ const NODES = [
     "title": "Conditional Return Skew",
     "tier": 3,
     "layer": "component",
-    "verdict": "open",
-    "role": "Empirical 3rd moment of 5-min returns — the maker's symmetric Phi assumes ZERO skew.",
+    "verdict": "walled",
+    "role": "Empirical 3rd moment of 5-min returns — the maker's symmetric Phi assumes ZERO skew. TESTED 2026-06-28 -> the maker prices it.",
     "equation": "g = E[(r-mu)^3]/sigma^3 (regime-conditional)",
-    "detail": "5yr spot gives a CAUSAL conditional-skew estimate. The maker's driftless-Gaussian Phi is symmetric BY CONSTRUCTION, so in negative-skew (liquidation-prone) regimes the underdog-Down may be systematically UNDER-priced = a genuine MODEL-FORM error, orthogonal to the priced directional trend (the 1st moment). CAVEAT: the ~15% sigma-padding crudely absorbs SYMMETRIC tails; only the ASYMMETRIC (skew) part is attackable, and the fee is brutal at the p~0.3-0.5 underdog where skew lives."
+    "detail": "TESTED 2026-06-28 -> DEAD (dead_ends/experiment_skew_residual.py). A per-coin CAUSAL trailing skewness of the realized 5-min returns ln(final/strike) carries NO information about the residual once the mid is in the model: moment-skew joint-control coef +0.002 (perm p=0.52), corr(skew, won-mid) = -0.001. A robust Bowley skew shows only a faint, BTC-concentrated, COIN-INCOHERENT whiff (sol/xrp sign-reversed). The ~15% sigma-padding absorbs the symmetric tails and the maker prices the asymmetric part too. Sign is regime-UNSTABLE (crypto inverse-leverage)."
   },
   {
     "id": "model-form-residual",
     "title": "Phi-vs-Empirical Residual",
     "tier": 4,
     "layer": "engine",
-    "verdict": "open",
-    "role": "Does the maker's Phi(d) leave a stable, regime-conditional calibration residual?",
+    "verdict": "walled",
+    "role": "Does the maker's Phi(d) leave a stable, regime-conditional calibration residual? TESTED -> no.",
     "equation": "P_emp(Up | d, skew-regime) - up_mid",
-    "detail": "THE one open model-form question (the candidate the hierarchy expansion surfaced). The directional/drift residual is WHITE (drift adds nothing beyond the mid). The only untested axis = the asymmetric/skew TAIL: bin (moneyness x causal skew-regime) and test whether the empirical Up-frequency deviates STABLY from the maker's QUOTE (not from textbook Phi) at the underdog. LOW prior (Phi fits R2=0.91; VRP padding) but testable NOW on existing data, no new collection. Gate via stats.assess (n_loss>=30, deflated) + the joint-control (skew independent of mid AND priced trend) + second-mind."
+    "detail": "TESTED 2026-06-28 -> DEAD. The field-research program's ONE testable lead. Not loss-starved this time (n_loss=412 = a real verdict): the directional net-EV gate FAILS (win 52.1% vs 54.4% breakeven, deflated p=1.0) and so does a robust-skew variant (50.5% vs 53.9%). Second-mind: 0/40 deflated grid cells survive, a sharper intraday-spot skew has the WRONG sign, no look-ahead bug, sign-flip is worse, ATM maker = the walled -0.365 toxic zone. The skew is the absorbable, fee-capped half = Grossman-Stiglitz 'residual sized to the fee'. See POSTMORTEM 1d. Only Thread B (settlement basis, data-gated) remains open."
   }
 ];
 

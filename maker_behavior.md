@@ -280,18 +280,22 @@ walled directional / lead-lag / microstructure family in new clothes (settled by
 **Only TWO nodes survive the "we can know it AND the maker doesn't already price it" filter:**
 1. **Settlement-oracle divergence = Thread B** — the one already-open, already-built thread (`experiment_settlement_basis.py`),
    data-gated. Medium prior.
-2. **THE one NEW lead — a model-FORM error (`model-form-residual` / `realized-skew` nodes).** The maker's quote is
-   `Φ(d)` — a **symmetric, driftless Gaussian** — so it **cannot encode conditional return SKEW**. In negative-skew
-   (liquidation-prone) regimes the **underdog-Down may be systematically under-priced** — a model-form error
-   **orthogonal to the priced directional trend** (3rd moment, not 1st), which is exactly why it could survive
-   where drift/trend died. **Testable NOW on existing data** (5yr spot for a causal skew regime + our resolved
-   windows), **LOW prior** (the ~15% σ-padding absorbs SYMMETRIC tails; the fee is brutal at the p≈0.3-0.5
-   underdog price where skew lives). The decisive test: bin (moneyness × causal skew-regime), residual =
-   empirical-Up-freq − the maker's QUOTE, joint-control (skew independent of the mid AND the priced trend),
-   gate via `stats.assess` (n_loss≥30, deflated) + second-mind.
+2. **THE one NEW lead — a model-FORM error (`model-form-residual` / `realized-skew` nodes). TESTED 2026-06-28 →
+   DEAD.** The maker's quote `Φ(d)` is a **symmetric, driftless Gaussian** that **cannot encode conditional return
+   SKEW** (3rd moment), so in principle a skew residual could survive where drift/trend (1st moment) died. Built
+   `dead_ends/experiment_skew_residual.py`: per-coin **causal trailing skewness** of the realized 5-min returns
+   `ln(final/strike)`, joint-control (`won_up ~ up_mid + trend + skew`), causal skew-tercile dose-response, and a
+   pre-committed directional net-EV gate. **The maker prices the skew.** Not loss-starved this time (n_loss=412 = a
+   real verdict): moment skew coef +0.002 (perm p=0.52, collapses given the mid), net-EV FAILS (52.1% vs 54.4% BE,
+   deflated p=1.0); a robust Bowley skew shows only a faint, BTC-concentrated, **coin-incoherent** (sol/xrp reversed)
+   whiff that is still fee-capped and non-monotone. Second-mind: 0/40 deflated grid cells survive, a sharper
+   intraday-spot skew has the **wrong sign** (crypto inverse-leverage = the regime-flipping risk the brief flagged),
+   no look-ahead bug, sign-flip is worse, ATM maker = the walled −0.365 toxic zone. **The skew is the absorbable,
+   fee-capped half** (Grossman-Stiglitz "residual sized to the fee"). See POSTMORTEM §1d.
 
-**So the expansion produced one concrete, on-existing-data candidate (the skew/model-form residual) and otherwise
-hardened the wall.** Bottom line unchanged: on-market, only Thread B (data-gated) + this low-prior skew seam.
+**So the field-research program's one concrete on-existing-data candidate (the skew/model-form residual) is now
+DEAD, and the survey otherwise hardened the wall.** Bottom line: on-market, the ONLY open thread is **Thread B
+(settlement basis), data-gated** — there is no remaining testable-now candidate.
 
 ## One-paragraph summary
 

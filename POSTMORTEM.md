@@ -115,6 +115,33 @@ guard:** in this product the favorite ask-change is outcome-dominated (corr 0.65
 measure within-winners before reading any tl-window ask-rise as "mechanical".* This closes the "predict the
 maker's σ string" corner entirely; only **Thread B (settlement feed), data-gated**, remains open.
 
+### 1d. Conditional-skew model-FORM residual (the field-research program's one testable lead) — 2026-06-28, second-mind reviewed
+The field-by-field deep-research program (`RESEARCH-EXTERNAL.md` "PHASE 1", 7 field briefs + synthesis) surfaced
+**exactly one** new on-data candidate: the maker's quote `Φ(d)` is a **symmetric, driftless Gaussian**, and option
+theory says the true digital = `Φ(d2) − vega·dσ/dK`, so a symmetric Φ **omits a 3rd-moment (skew) term**. Unlike
+σ-level (which the maker re-fits → self-priced), a single σ *cannot* encode the 3rd moment, so a skew residual
+*could* survive. Rough-vol (H≈0.1, ATM skew ∝ τ^−0.4) says it would be MAXIMAL at our 5-min horizon — the strongest
+pro-argument. Built `dead_ends/experiment_skew_residual.py`: per-coin **causal trailing skewness** of the realized
+5-min returns `ln(final/strike)` (the literal variable the digital bets on), joint-control (`won_up ~ up_mid +
+trend + skew`), per-coin causal skew-tercile dose-response, and a pre-committed directional net-EV gate (buy Up in
+the most-negative-skew tercile, Down in the most-positive — sign locked from theory, no in-sample flip).
+
+**DEAD — the maker prices the skew.** This corner was NOT loss-starved (n_loss = 412 — a *real* verdict, the first
+since favorite-tail). Under the literal **moment** skew (pre-committed primary) the skew coef is **+0.002** (negative
+in 20% of refits, permutation p=0.52 → collapses given the mid), `corr(skew, won−mid) = −0.001`, and the net-EV gate
+**FAILS** (win 52.1% vs 54.4% breakeven, mean −0.046, cluster-CI[−0.117,+0.025], deflated p=1.0). Under a **robust
+Bowley** skew there is a *faint* theory-signed joint-control whiff (coef −0.156, perm p=0.003) — but it is
+**BTC-concentrated and coin-INCOHERENT** (sol/xrp sign-reversed; LOCO halves it; un-deflated within-coin p=0.044 dies
+under multiplicity), **non-monotone**, and **still fee-capped** (50.5% vs 53.9% breakeven). The **second mind** (hard
+refutation attempt) confirmed: no look-ahead bug (`trailing_proxy` proven invariant to corrupting future returns); a
+sign-flip is *worse* (= a no-signal problem, not a sign error); **0 of 40 deflated grid cells** (2 proxies × 4
+trailing-windows × 5 moneyness bands) clear the fee; a sharper **intraday-spot** skew even has the **wrong sign**
+(crypto's INVERSE leverage effect makes the realized→implied skew mapping regime-unstable — the make-or-break risk
+the brief flagged); and the ATM maker route is the already-walled **−0.365** toxic zone. **This is the absorbable,
+fee-capped half of the model-form story** — Grossman-Stiglitz "residual sized to the fee." With the skew lead dead,
+the field-research program has **no remaining testable-now candidate**; the only on-market open thread is **Thread B
+(settlement basis), data-gated**.
+
 ## 2. Why — the walls, reframed against theory
 
 - **Efficiency = Grossman-Stiglitz.** The token already prices recent knowledge (residual ≈ 0). We were
