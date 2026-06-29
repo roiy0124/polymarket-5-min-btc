@@ -108,15 +108,14 @@ def connectivity_check(creds):
     convergence point: run it once the EOA is funded + allowances set."""
     log_event("connectivity_start")
     try:
-        from py_clob_client.client import ClobClient
+        from py_clob_client_v2.client import ClobClient   # CLOB V2
     except ImportError:
-        print("py-clob-client not installed. pip install -r requirements-exec.txt")
+        print("py-clob-client-v2 not installed. pip install -r requirements-exec.txt")
         return False
     try:
-        client = ClobClient("https://clob.polymarket.com", key=creds["private_key"],
-                            chain_id=137, signature_type=creds["signature_type"],
-                            funder=creds["funder"])
-        client.set_api_creds(client.create_or_derive_api_creds())
+        client = ClobClient("https://clob.polymarket.com", 137, key=creds["private_key"],
+                            signature_type=creds["signature_type"], funder=creds["funder"])
+        client.set_api_creds(client.create_or_derive_api_key())
         addr = getattr(client, "get_address", lambda: "?")()
         log_event("auth_ok", signer_address=addr, funder=creds["funder"],
                   signature_type=creds["signature_type"])
@@ -128,7 +127,7 @@ def connectivity_check(creds):
     # version, so we never let one failure abort the others (EXECUTION.md: these
     # are the "still verify" items -- balances/allowances/fees).
     for name, fn in [
-        ("open_orders", lambda: _safe(client, "get_orders")),
+        ("open_orders", lambda: _safe(client, "get_open_orders")),   # V2 renamed get_orders
         ("recent_trades", lambda: _safe(client, "get_trades")),
         ("usdc_balance_allowance", lambda: _balance_allowance(client, creds["signature_type"])),
     ]:
@@ -146,17 +145,18 @@ def _safe(client, method):
     if fn is None:
         return f"<no {method} on this SDK>"
     try:
-        from py_clob_client.clob_types import OpenOrderParams
-        return fn(OpenOrderParams()) if method == "get_orders" else fn()
+        from py_clob_client_v2.clob_types import OpenOrderParams
+        return fn(OpenOrderParams()) if method == "get_open_orders" else fn()
     except TypeError:
         return fn()
 
 
 def _balance_allowance(client, sigtype=0):
     try:
-        from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
-        # signature_type matters: for a proxy (1/2) the balance lives at the proxy
-        # address, not the signer -- omitting it reads 0 on a funded proxy account.
+        from py_clob_client_v2.clob_types import BalanceAllowanceParams, AssetType
+        # NOTE: for a delegated-signer proxy this CLOB readout is unreliable (it
+        # resolves a different address than the order maker) and can show 0 on a
+        # funded account -- read the maker's pUSD balance on-chain to be sure.
         p = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL, signature_type=sigtype)
         return client.get_balance_allowance(p)
     except Exception as e:
@@ -227,13 +227,12 @@ class FillRouter:
 def start_user_stream(creds, condition_ids, on_fill):
     """Run UserStream in a background thread (its own asyncio loop)."""
     import asyncio
-    from py_clob_client.client import ClobClient
+    from py_clob_client_v2.client import ClobClient   # CLOB V2
     from exec_engine.user_stream import UserStream
 
-    client = ClobClient("https://clob.polymarket.com", key=creds["private_key"],
-                        chain_id=137, signature_type=creds["signature_type"],
-                        funder=creds["funder"])
-    api = client.create_or_derive_api_creds()
+    client = ClobClient("https://clob.polymarket.com", 137, key=creds["private_key"],
+                        signature_type=creds["signature_type"], funder=creds["funder"])
+    api = client.create_or_derive_api_key()
     api_key = getattr(api, "api_key", None) or getattr(api, "apiKey", None)
     secret = getattr(api, "api_secret", None) or getattr(api, "secret", None)
     passphrase = getattr(api, "api_passphrase", None) or getattr(api, "passphrase", None)
@@ -408,8 +407,8 @@ def _reconcile(broker, lock):
     inspect. Full position-drift handling is a KNOWN GAP."""
     try:
         client = broker._ensure_client()
-        from py_clob_client.clob_types import OpenOrderParams
-        remote = client.get_orders(OpenOrderParams())
+        from py_clob_client_v2.clob_types import OpenOrderParams
+        remote = client.get_open_orders(OpenOrderParams())   # V2 renamed get_orders
     except Exception as e:
         log_event("reconcile_err", error=repr(e))
         return
