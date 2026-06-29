@@ -5,8 +5,10 @@ PaperBroker - simulates resting-limit-order fills against the real trade stream
               using the conservative RiskAverse queue model (you fill only after
               cumulative trade volume clears the size that was ahead of you).
               This is also the fill engine the backtester will reuse.
-LiveBroker  - real Polymarket CLOB orders. STUB until the execution research lands;
-              refuses to operate unless SafetyConfig(live=True) + credentials.
+LiveBroker  - real Polymarket CLOB **V2** orders (py-clob-client-v2). Refuses to
+              operate unless SafetyConfig(live=True) + credentials. Only a
+              self-custody EOA (signature_type=0) is accepted by the API for order
+              placement — email/proxy wallets are rejected (see class docstring).
 
 The fill callback signature is: on_fill(order, fill_qty, fill_price).
 """
@@ -144,21 +146,28 @@ class PaperBroker(Broker):
 
 
 class LiveBroker(Broker):
-    """Real Polymarket CLOB broker, wired per the verified execution recipe
-    (see EXECUTION.md). Places GTC resting limits / FOK marketable orders and
-    cancels them via py-clob-client.
+    """Real Polymarket CLOB **V2** broker (py-clob-client-v2; V1 is server-rejected
+    after the 2026-04-28 cutover). Places GTC resting limits / FOK marketable orders
+    and cancels them. Collateral is pUSD; allowances target the V2 exchanges.
 
     SAFETY: refuses to operate unless SafetyConfig(live=True) AND credentials are
-    supplied. Only a plain EOA (signature_type=0, funder=EOA) is verified to work
-    end-to-end — website/proxy (POLY_1271) accounts fail with HTTP 400, so this
-    enforces signature_type=0 by default. UNTESTED without real keys: paper-trade
-    first, ensure USDC+CTF allowances are set, and watch the first live fills by
-    hand. Fill detection / auto-sell is driven by user_stream gated on CONFIRMED.
+    supplied. signature_type:
+      0 = EOA (self-custody; funder = the signer's own address)  <-- the ONLY type
+          that works for API order placement (verified 2026-06-28).
+      1 = POLY_PROXY (Polymarket email/Google login; funder = proxy/deposit address)
+      2 = POLY_GNOSIS_SAFE (browser-wallet proxy; funder = proxy address)
+    *** CRITICAL: email/proxy wallets (type 1/2) are REJECTED by the V2 API with
+    "maker address not allowed, please use the deposit wallet flow" — confirmed live.
+    Fund a self-custody EOA and use signature_type=0. ***
+    For 1/2 the signer key is the Magic/owner key (exported from Polymarket) and the
+    funder is the PROXY address that holds the USDC. UNTESTED without real keys:
+    paper-trade first, ensure USDC+CTF allowances are set, and watch the first live
+    fills by hand. Fill detection / auto-sell is driven by user_stream on CONFIRMED.
 
     credentials = {
-        "private_key": "0x...",        # the EOA private key (L1 signer)
-        "funder": "0x...",             # usually the SAME EOA address
-        "signature_type": 0,            # EOA; do NOT use 3 (POLY_1271) — broken w/ SDK
+        "private_key": "0x...",        # the L1 signer key (EOA or exported proxy key)
+        "funder": "0x...",             # EOA addr (type 0) or proxy/deposit addr (1/2)
+        "signature_type": 0,            # 0 EOA | 1 POLY_PROXY | 2 POLY_GNOSIS_SAFE
         "host": "https://clob.polymarket.com",   # optional
         "api_creds": {...},             # optional; derived if omitted
         "neg_risk": False,              # set True only for neg-risk markets
@@ -176,11 +185,14 @@ class LiveBroker(Broker):
         if not credentials or not credentials.get("private_key"):
             raise RuntimeError("LiveBroker requires credentials with a 'private_key'.")
         sigtype = credentials.get("signature_type", 0)
-        if sigtype != 0:
+        if sigtype not in (0, 1, 2):
             raise RuntimeError(
-                f"signature_type={sigtype} is not supported. Only a plain EOA "
-                f"(signature_type=0, funder=EOA) is verified; website/proxy "
-                f"(POLY_1271=3) accounts fail HTTP 400 with the SDK. Fund a plain EOA.")
+                f"signature_type={sigtype} invalid. Use 0 (EOA / self-custody), "
+                f"1 (POLY_PROXY = Polymarket email/Google login), or 2 "
+                f"(POLY_GNOSIS_SAFE = browser-wallet proxy). For 1 and 2 the "
+                f"'funder' must be your Polymarket proxy/deposit address (where the "
+                f"USDC sits), NOT the signer's address.")
+        self.signature_type = sigtype
         self.credentials = credentials
         self.neg_risk = bool(credentials.get("neg_risk", False))
         self._client = None
@@ -192,14 +204,14 @@ class LiveBroker(Broker):
         if self._client is not None:
             return self._client
         try:
-            from py_clob_client.client import ClobClient
+            from py_clob_client_v2.client import ClobClient   # CLOB V2 (V1 is dead post 2026-04-28)
         except ImportError as e:
-            raise RuntimeError("pip install py-clob-client (see requirements-exec.txt)") from e
+            raise RuntimeError("pip install py-clob-client-v2 (see requirements-exec.txt)") from e
         c = self.credentials
-        client = ClobClient(c.get("host", self.HOST), key=c["private_key"],
-                            chain_id=self.CHAIN_ID, signature_type=0,
-                            funder=c.get("funder"))
-        creds = c.get("api_creds") or client.create_or_derive_api_creds()
+        # V2 constructor: (host, chain_id, key=, signature_type=, funder=)
+        client = ClobClient(c.get("host", self.HOST), self.CHAIN_ID, key=c["private_key"],
+                            signature_type=self.signature_type, funder=c.get("funder"))
+        creds = c.get("api_creds") or client.create_or_derive_api_key()  # V2: create_or_derive_api_key
         client.set_api_creds(creds)
         self._client = client
         return client
@@ -216,15 +228,15 @@ class LiveBroker(Broker):
             self.orders[intent.client_id] = order
             return order
         client = self._ensure_client()
-        from py_clob_client.clob_types import OrderArgs, OrderType, PartialCreateOrderOptions
-        from py_clob_client.order_builder.constants import BUY, SELL
-        args = OrderArgs(token_id=intent.token_id, price=self._round_tick(intent.price),
-                         size=intent.size, side=(BUY if intent.side == Side.BUY else SELL))
+        from py_clob_client_v2.clob_types import OrderArgsV2, OrderType, PartialCreateOrderOptions
+        from py_clob_client_v2.order_builder.constants import BUY, SELL
+        args = OrderArgsV2(token_id=intent.token_id, price=self._round_tick(intent.price),
+                           size=intent.size, side=(BUY if intent.side == Side.BUY else SELL))
         otype = {"GTC": OrderType.GTC, "FOK": OrderType.FOK,
                  "FAK": OrderType.FAK, "GTD": OrderType.GTD}.get(intent.tif, OrderType.GTC)
-        options = PartialCreateOrderOptions(neg_risk=self.neg_risk)
-        signed = client.create_order(args, options)
-        resp = client.post_order(signed, otype)
+        options = PartialCreateOrderOptions(tick_size=str(self.config.tick), neg_risk=self.neg_risk)
+        # V2 folds create_order + post_order into one call.
+        resp = client.create_and_post_order(args, options, otype)
         oid = (resp or {}).get("orderID") or (resp or {}).get("orderId")
         if not oid or (resp or {}).get("success") is False:
             order.status = OrderStatus.REJECTED
@@ -242,8 +254,10 @@ class LiveBroker(Broker):
         if not oid:
             return False
         client = self._ensure_client()
-        resp = client.cancel(oid) or {}
-        ok = oid in (resp.get("canceled") or [])
+        from py_clob_client_v2.clob_types import OrderPayload
+        resp = client.cancel_order(OrderPayload(orderID=oid)) or {}   # V2 cancel
+        canceled = resp.get("canceled") if isinstance(resp, dict) else None
+        ok = (oid in canceled) if canceled is not None else bool(resp)
         order = self.orders.get(client_id)
         if ok and order and not order.is_terminal:
             order.status = OrderStatus.CANCELED

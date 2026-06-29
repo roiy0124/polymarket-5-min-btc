@@ -21,12 +21,12 @@ import webbrowser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
-DB = os.path.join(HERE, "btc_updown.db")
+import coins
+DB = coins.live_db("btc")
 SIGNALS = os.path.join(HERE, "signals.json")
-OLD_DBS = os.path.join(HERE, "old_dbs")
+OLD_DBS = coins.archive_dir("btc")
 STOP = os.path.join(HERE, "STOP")
 DASH = "http://127.0.0.1:8765"
-SIGNALS_FRESH_MIN = 20      # bot startup: re-evaluate signals older than this
 
 
 def run(cmd, pause=True, env_extra=None):
@@ -65,6 +65,15 @@ def ask_scope(unit="days"):
     return {"BTC_ANALYSIS_DAYS": ask("how many days", 7)}
 
 
+def ask_coins():
+    """Which coins to process: ALL six (default) or one."""
+    print(f"\n  coins:  [1] ALL ({', '.join(coins.ENABLED)})   [2] pick one")
+    if (input("  coins [1]: ").strip() or "1") != "2":
+        return list(coins.ENABLED)
+    c = input(f"  which ({'/'.join(coins.ENABLED)}): ").strip().lower()
+    return [c] if c in coins.COINS else list(coins.ENABLED)
+
+
 def _launch_supervisor():
     flags = 0
     if os.name == "nt":
@@ -94,12 +103,28 @@ def a_status():
 
 def a_peek():         run([PY, "peek.py"])
 def a_peek_windows(): run([PY, "peek.py", "windows"])
-def a_round_charts(): run([PY, "chart_capture.py", "--once"])
 def a_selftest():     run([PY, "-m", "exec_engine.selftest"])
 
 
+def a_round_charts():
+    sel = ask_coins()
+    for c in sel:
+        run([PY, "chart_capture.py", "--coin", c, "--once"], pause=False)
+    run([PY, "make_gathered.py", "--what", "round"], pause=False)   # cross-coin gather
+    input("\n[Enter] to return to the menu ")
+
+
 def a_exit_maps():
-    run([PY, "-m", "analysis.exit_maps"], env_extra=ask_scope())
+    env = ask_scope()
+    sel = ask_coins()
+    for c in sel:
+        run([PY, "-m", "analysis.exit_maps", "--coin", c], pause=False, env_extra=env)
+    run([PY, "make_gathered.py", "--what", "exit"], pause=False)    # cross-coin gather
+    input("\n[Enter] to return to the menu ")
+
+
+def a_gathered():
+    run([PY, "make_gathered.py"])
 
 
 def a_calibration():
@@ -173,38 +198,22 @@ def _run_finder(meta, scope=None, pause=False):
 
 
 def a_phase2():
-    """Bot startup: ensure signals are fresh (<=20 min) -- showing them if so,
-    re-evaluating on live data if not -- then choose the EV floor and launch the
-    paper executor."""
-    meta = _signals_meta()
-    gen = meta.get("generated") if meta else None
-    age = (time.time() - gen) / 60.0 if gen else None
-
-    if meta is None or age is None or age > SIGNALS_FRESH_MIN:
-        if meta is None:
-            print("\n  no signals.json yet -- generating fresh signals first.")
-        else:
-            shown = f"{age:.0f}" if age is not None else "?"
-            print(f"\n  signals are {shown} min old (> {SIGNALS_FRESH_MIN}) -- re-evaluating...")
-        scope = ask_scope(unit="hours")     # which data window to build signals from
-        _run_finder(meta, scope, pause=False)
-    else:
-        print(f"\n  signals are {age:.0f} min old (<= {SIGNALS_FRESH_MIN}) -- using them:")
-        run([PY, "-m", "analysis.signals", "--show"], pause=False)
-
-    if not os.path.exists(SIGNALS):
-        print("\n  no signals to trade -- aborting startup.")
-        input("\n[Enter] ")
-        return
-    ev = ask("\n  min EV per $1 to TRADE (e.g. 0.5)", 0.5)
-    print("  (PAPER forward-test of signals.json -- watches live rounds, nothing real")
-    print("   is traded; appends paper_trades.csv. Ctrl-C to stop and return.)")
-    run([PY, "phase2.py", "--min-ev", ev])
+    """Launch the NESTED paper executor (phase2_nested.py). It re-fits the nested
+    gap->time signals (combo 24/16/8) every 30 min and forward-tests them in paper.
+    It generates its own signals, so no signals.json / EV-floor prompt is needed."""
+    if not is_live():
+        print("\n  NOTE: collectors don't look live -- the executor needs live "
+              "trades/books + window resolutions.")
+        print("  Start them (option 17) first, or it will just idle.")
+    print("\n  (PAPER forward-test of the NESTED strategy -- nothing real is traded;")
+    print("   re-fits every 30 min; appends paper_nested_trades.csv. Ctrl-C to stop.)")
+    run([PY, "phase2_nested.py"])
 
 
 def a_paper_ledger():
     n = ask("min attempts per signal to show", 1)
-    run([PY, "-m", "analysis.paper_ledger", "--min-n", n])
+    run([PY, "-m", "analysis.paper_ledger", "--ledger", "paper_nested_trades.csv",
+         "--min-n", n])
 
 
 def a_round_review():
@@ -292,8 +301,9 @@ MENU = [
     ("3", "Peek -- windows table", a_peek_windows),
     ("4", "Open live dashboard (browser)", a_dashboard),
     ("VISUALS", None),
-    ("5", "Generate exit maps (per entry price)", a_exit_maps),
-    ("6", "Generate round charts (backfill)", a_round_charts),
+    ("5", "Generate exit maps (per entry price; all coins or one)", a_exit_maps),
+    ("6", "Generate round charts (backfill; all coins or one)", a_round_charts),
+    ("m", "Gathered cross-coin montages — REBUILD (5 & 6 already auto-build them)", a_gathered),
     ("ANALYSIS", None),
     ("7", "Phase-1 SIGNAL FINDER (win/ROI floors -> signals.json)", a_signals),
     ("8", "Calibration test (price vs outcome)", a_calibration),
@@ -301,8 +311,8 @@ MENU = [
     ("10", "Reversion screen (dip -> recover)", a_reversion),
     ("11", "Combo EV scan", a_combo_ev),
     ("EXECUTION (paper)", None),
-    ("12", "PHASE 2 -- paper executor (live forward-test of signals.json)", a_phase2),
-    ("13", "Paper ledger summary (realized vs predicted EV)", a_paper_ledger),
+    ("12", "PHASE 2 -- NESTED paper executor (gap->time, refits 30min)", a_phase2),
+    ("13", "Paper ledger summary (NESTED: paper_nested_trades.csv)", a_paper_ledger),
     ("14", "Round reviews (per-round charts of paper games)", a_round_review),
     ("15", "Paper-trade a single limit order", a_paper),
     ("16", "Execution engine self-test", a_selftest),

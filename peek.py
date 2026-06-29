@@ -7,8 +7,10 @@
 import os
 import sqlite3
 import sys
+import argparse
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.db")
+import coins
+DB_PATH = coins.live_db(coins.default_coin())
 
 
 def fmt(v, nd=4):
@@ -27,8 +29,8 @@ def summary(conn):
     try:
         nbook = conn.execute("SELECT COUNT(*) FROM book_events").fetchone()[0]
         ntrade = conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
-        nbtc = conn.execute("SELECT COUNT(*) FROM btc_ticks").fetchone()[0]
-        print(f"ws streams -> book_events: {nbook}   trades: {ntrade}   btc_ticks: {nbtc}")
+        nbtc = conn.execute("SELECT COUNT(*) FROM price_ticks").fetchone()[0]
+        print(f"ws streams -> book_events: {nbook}   trades: {ntrade}   price_ticks: {nbtc}")
     except sqlite3.OperationalError:
         pass
     print()
@@ -36,7 +38,7 @@ def summary(conn):
     print(f"{'utc time':>24} {'t-left':>7} {'up_bid':>7} {'up_ask':>7} {'up_mid':>7} "
           f"{'dn_mid':>7} {'binance':>11} {'pyth':>11}")
     rows = conn.execute(
-        """SELECT ts_utc, time_left, up_bid, up_ask, up_mid, down_mid, btc_binance, btc_pyth
+        """SELECT ts_utc, time_left, up_bid, up_ask, up_mid, down_mid, price_binance, price_pyth
            FROM snapshots ORDER BY ts DESC LIMIT 12"""
     ).fetchall()
     for r in reversed(rows):
@@ -57,13 +59,19 @@ def windows(conn):
 
 
 def main():
+    ap = argparse.ArgumentParser(description="inspect a coin's collected data")
+    ap.add_argument("mode", nargs="?", default="summary", choices=["summary", "windows"])
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS),
+                    help="which coin's DB to inspect (default: env ANALYSIS_COIN or btc)")
+    args = ap.parse_args()
+    db = coins.live_db(args.coin)
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(db)
     except sqlite3.Error as e:
-        print(f"cannot open {DB_PATH}: {e}")
+        print(f"cannot open {db}: {e}")
         return
-    mode = sys.argv[1] if len(sys.argv) > 1 else "summary"
-    if mode == "windows":
+    print(f"[{args.coin}] {db}")
+    if args.mode == "windows":
         windows(conn)
     else:
         summary(conn)

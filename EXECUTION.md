@@ -29,6 +29,43 @@ explicit opt-in described below — nothing here can spend money on its own.
 | `exec_engine/user_stream.py` | live user-channel WS listener (fills/orders), gated by creds |
 | `exec_engine/selftest.py` | scripted end-to-end paper test (run it: `python -m exec_engine.selftest`) |
 | `paper_trade.py` | live PAPER harness — drives the engine off the real trade stream |
+| `phase2.py` | PAPER executor — forward-tests signals.json (PaperBroker) |
+| `live_runner.py` | **Phase 3 LIVE executor** (LiveBroker) — REAL money. See below. |
+
+## Phase 3 — `live_runner.py` (LIVE, real money) — *UNTESTED*
+
+The live sibling of `phase2.py`. Reuses the entire spine (signals.json,
+StrategyRunner, OrderManager auto-sell, settlement, epoch-stamped ledger) and
+changes only: (1) broker → `LiveBroker` + `SafetyConfig(live=True)`; (2) fills come
+from the authenticated `UserStream`, gated on **CONFIRMED**, routed via `FillRouter`
+into the same auto-sell path; (3) live-only safety: file kill-switch (`KILL`),
+structured JSON log (`live_runner.log`), periodic reconcile. Refreshes signals on
+startup like the paper executor.
+
+**Cannot spend money by accident — triple-gated:**
+- Default mode `--connectivity` is read-only (auth + list orders/trades/balances).
+- Real trading needs BOTH `--arm` AND env `LIVE_RUNNER_CONFIRM=I_UNDERSTAND`.
+- Every order still passes `SafetyConfig.validate` + account caps; conservative
+  defaults (`--max-order-usd 5`, `--max-position-usd 20`, `--daily-loss-usd 20`).
+
+```sh
+python live_runner.py --connectivity        # read-only; run FIRST once EOA funded
+python live_runner.py --arm --min-ev 0.5    # REAL orders (needs the confirm env var)
+```
+Credentials via env / git-ignored `.env`: `POLY_PRIVATE_KEY`, `POLY_FUNDER`.
+
+### KNOWN GAPS before this can be trusted with money
+1. **User-channel field names UNVERIFIED** — `FillRouter._match` / status parsing are
+   confirmed on paper from research, never against a live socket. Watch first fills
+   by hand; verify `asset_id`/`status`/order-id keys.
+2. **Per-window re-subscription** — `UserStream` subscribes once at connect; it does
+   not yet re-subscribe to each new window's tokens. Needs fixing for unattended runs.
+3. **Reconciliation is detect-only** — logs drift, does not handle position drift /
+   halt-and-flatten. No idempotency/retry on `place()` (network blip → possible dup).
+4. **Allowances + fees** — USDC+CTF approvals and the real maker/taker fee still
+   unverified (orders silently fail without allowances; fees bite the ~11¢ margin).
+5. **Edge not validated** — do not run for real until the paper edge clears the bar
+   (see memory `paper-edge-not-yet-validated`).
 
 ## Fill model (paper) — and why it's conservative
 
@@ -84,13 +121,19 @@ newly-filled quantity at the exit price (so partial fills are hedged immediately
 > unless `SafetyConfig(live=True)` + credentials, and enforces `signature_type=0`.
 > **UNTESTED without real keys — paper-trade first.**
 
-### ⚠️ The single biggest gotcha
-**Website / email-funded accounts use a proxy wallet = `signature_type=3`
-(POLY_1271).** The SDK binds the API key to your EOA, so POLY_1271 orders fail
-**HTTP 400 "order signer address has to be the address of the API KEY"** (open
-issues #70/#64/#71/#75/#77). **Only a plain EOA (`signature_type=0`, `funder`=that
-EOA's address) is verified to work.** ⇒ Fund a dedicated EOA directly, don't trade
-from the website proxy wallet via the SDK.
+### ⚠️ The single biggest gotcha — CONFIRMED LIVE 2026-06-28
+**Email / website / proxy wallets CANNOT place orders via the API.** A funded
+email-login account (signature_type=1, $53 pUSD on-chain, allowances set) was
+rejected by CLOB **V2** with `HTTP 400 "maker address not allowed, please use the
+deposit wallet flow"` — on both neg-risk and binary markets. The same class of block
+applies to POLY_PROXY (1) / POLY_GNOSIS_SAFE (2) / POLY_1271 (3). **Only a plain
+self-custody EOA (`signature_type=0`, `funder` = that EOA's own address) is accepted
+for API order placement.** ⇒ Fund a dedicated EOA directly; do not trade the
+website/email proxy wallet via the SDK.
+
+Also note: for a delegated-signer proxy the CLOB `get_balance_allowance` readout can
+show **0 even on a funded account** (it resolves a different address than the order
+maker). Read the maker's pUSD balance on-chain to know the real tradeable balance.
 
 ### Auth
 ```python
@@ -148,10 +191,18 @@ User channel `wss://ws-subscriptions-clob.polymarket.com/ws/user`,
   unit/effective rate matters a lot to an ~11¢ margin.
 - **Rate limits, nonce, server clock-sync, idempotency** — confirm before unattended.
 
-### SDK note
-`py-clob-client` is archived (still works for the EOA path). Successor is
-`py-sdk` (PyPI `polymarket-client` 0.1.0b8) but its README lacks mechanics —
-stay on `py-clob-client` until the new SDK documents these calls.
+### SDK note — MIGRATED TO V2 (2026-06-28)
+Polymarket cut over to **CLOB V2 on 2026-04-28**; V1 `py-clob-client` is archived and
+its V1-signed orders are server-rejected. `LiveBroker` + `live_runner.py` now use
+**`py-clob-client-v2`** (1.0.1, installs on Python 3.14 — no web3 needed). API deltas
+applied: `ClobClient(host, chain_id, key=, signature_type=, funder=)` (chain_id
+positional); `create_or_derive_api_key()` (was `_api_creds`); `OrderArgsV2`;
+`create_and_post_order(args, options, order_type)` (folds create+post);
+`PartialCreateOrderOptions(tick_size, neg_risk)`; `cancel_order(OrderPayload(orderID))`;
+`get_open_orders()` (was `get_orders`). Collateral is **pUSD**
+(`0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB`); V2 exchange
+`0xE111180000d2663C0091e4f400237545B87B996B`. The `code` snippets above are V1-era —
+the V2 calls are as just listed.
 
 Sources: github.com/Polymarket/py-clob-client · docs.polymarket.com (CLOB
 auth / orders / cancel / user-channel) · py-clob-client issues #121/#70/#147 ·

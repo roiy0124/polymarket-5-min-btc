@@ -23,11 +23,16 @@ provisional, not proof.
 
 import os
 import csv
+import math
+import json
+import time
 import argparse
+import statistics
 from collections import defaultdict
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(HERE, "paper_trades.csv")
+HISTORY = os.path.join(HERE, "signals_history.jsonl")
 SMALL_N = 10
 
 
@@ -66,6 +71,101 @@ def _stats(rows):
     }
 
 
+def _fill_stats(rows):
+    """Per-FILL distribution stats: mean $ PnL per filled leg, its t-stat vs 0
+    (the honest 'is this real?' test), and the fill win-rate with a 95% Wilson CI.
+    Returns None if nothing filled."""
+    pnls = [_f(r["realized_pnl"]) for r in rows if _f(r["buy_filled"]) >= 1]
+    n = len(pnls)
+    if n == 0:
+        return None
+    wins = sum(1 for p in pnls if p > 1e-9)
+    mean = sum(pnls) / n
+    t = None
+    if n >= 2:
+        se = statistics.stdev(pnls) / math.sqrt(n)
+        t = (mean / se) if se > 1e-12 else None
+    p, z = wins / n, 1.96
+    den = 1.0 + z * z / n
+    c = (p + z * z / (2 * n)) / den
+    m = z * math.sqrt((p * (1 - p) + z * z / (4 * n)) / n) / den
+    return {"n": n, "wins": wins, "mean": mean, "t": t,
+            "ci": (max(0.0, c - m), min(1.0, c + m))}
+
+
+def _load_history():
+    """signals_history.jsonl -> {rounded generated ts: record}. Lets each epoch be
+    annotated with the floors/scope that produced it."""
+    hist = {}
+    if not os.path.exists(HISTORY):
+        return hist
+    with open(HISTORY) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            g = rec.get("generated")
+            if g is not None:
+                hist[round(float(g))] = rec
+    return hist
+
+
+def _print_epochs(rows):
+    """Split the ledger by signal generation (sig_gen) and score each epoch on its
+    own, so a refreshed signal set is never blended with a dead one."""
+    groups = defaultdict(list)
+    for r in rows:
+        groups[(r.get("sig_gen") or "").strip()].append(r)
+    if list(groups) == [""]:
+        print("\n  (no sig_gen stamps yet -- these legs predate epoch tracking; "
+              "re-launch the executor to start stamping.)")
+        return
+    hist = _load_history()
+    print("\n" + "=" * 78)
+    print("  BY SIGNAL EPOCH  (each finder run = one generation; OOS = leg's window "
+          "began at/after generation)")
+    print("=" * 78)
+
+    def sortkey(k):
+        try:
+            return (0, float(k))
+        except ValueError:
+            return (1, 0.0)
+
+    for key in sorted(groups, key=sortkey):
+        rs = groups[key]
+        st, fs = _stats(rs), _fill_stats(rs)
+        if key == "":
+            label, floors = "unstamped (pre-tracking legs)", ""
+        else:
+            ts = round(float(key))
+            label = time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
+            rec = hist.get(ts)
+            floors = (f"win>={float(rec.get('min_win', 0)):.0%} "
+                      f"ROI>={float(rec.get('min_roi', 0)):+.0%} "
+                      f"EV>{rec.get('min_ev', 0)} "
+                      f"scope={rec.get('scope_days') or 'current'} "
+                      f"({rec.get('n_windows', '?')} win)") if rec else "(not in archive)"
+        oos = sum(1 for r in rs if key and _f(r["window_start"]) >= float(key))
+        gap = (st["ev_fill"] - st["ev_pred"]) if (
+            st["ev_fill"] is not None and st["ev_pred"] is not None) else None
+        print(f"\n  * {label}   {floors}")
+        print(f"    legs {st['n']}  filled {st['filled']} ({_pct(st['fill_rate'])})  "
+              f"sold {st['sold']}  OOS {oos}/{st['n']}  pnl {st['pnl']:+.2f}")
+        print(f"    EV/$1  pred {_ev(st['ev_pred'])}  on-fill {_ev(st['ev_fill'])}  "
+              f"per-att {_ev(st['ev_att'])}" + (f"  gap {gap:+.2f}" if gap is not None else ""))
+        if fs:
+            flag = "*" if fs["n"] < SMALL_N else " "
+            tt = f"{fs['t']:+.2f}" if fs["t"] is not None else "   -"
+            ci = f"[{fs['ci'][0]:.0%}, {fs['ci'][1]:.0%}]"
+            print(f"    per-fill $ mean {fs['mean']:+.3f}{flag}  t={tt} (|t|>2 ~ 95%)  "
+                  f"win {fs['wins']}/{fs['n']} CI {ci}")
+
+
 def _pct(x):
     return f"{x*100:>3.0f}%" if x is not None else "   -"
 
@@ -79,6 +179,8 @@ def main():
     ap.add_argument("--ledger", default=LEDGER)
     ap.add_argument("--min-n", type=int, default=1, dest="min_n",
                     help="only show signals with at least this many attempts")
+    ap.add_argument("--epochs", action=argparse.BooleanOptionalAction, default=True,
+                    help="split the scoreboard by signal generation (--no-epochs to hide)")
     args = ap.parse_args()
 
     if not os.path.exists(args.ledger) or os.path.getsize(args.ledger) == 0:
@@ -131,6 +233,9 @@ def main():
         print(f"  (no signal has >= {args.min_n} attempts yet)")
     print("\n  EVfill is the apples-to-apples check vs EVpred; EVatt folds in fill rate.")
     print("  Small n = provisional. Let many rounds accumulate before trusting any line.")
+
+    if args.epochs:
+        _print_epochs(rows)
 
 
 if __name__ == "__main__":

@@ -28,13 +28,26 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
+import coins
+
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
+DB_PATH = coins.live_db(coins.default_coin())
 LEDGER = os.path.join(HERE, "paper_trades.csv")
 OUTDIR = os.path.join(HERE, "round_reviews")
 WINDOW = 300.0
 SIDE_COLOR = {"up": "#1f77b4", "down": "#8c564b"}
 SIDE_MARKER = {"up": "o", "down": "s"}      # circle = up order, square = down order
+COIN = coins.default_coin()                 # env ANALYSIS_COIN (default btc) — the reviewed coin
+COLOR = coins.color(COIN)
+
+
+def pxfmt(v):
+    """Price with magnitude-appropriate decimals (so XRP/DOGE don't show as 1/0)."""
+    if v is None:
+        return "?"
+    a = abs(v)
+    d = 0 if a >= 1000 else 2 if a >= 10 else 4 if a >= 1 else 5 if a >= 0.01 else 6
+    return f"{v:.{d}f}"
 
 
 def _f(x, default=0.0):
@@ -69,8 +82,8 @@ def path_for(conn, ws, side):
 def btc_path(conn, ws):
     """[(minutes_in, btc_price)] over the window (Binance)."""
     rows = conn.execute(
-        "SELECT time_left, btc_binance FROM snapshots WHERE window_start=? "
-        "AND btc_binance IS NOT NULL ORDER BY ts", (ws,)).fetchall()
+        "SELECT time_left, price_binance FROM snapshots WHERE window_start=? "
+        "AND price_binance IS NOT NULL ORDER BY ts", (ws,)).fetchall()
     return [(max(0.0, (WINDOW - tl) / 60.0), b) for tl, b in rows]
 
 
@@ -161,18 +174,19 @@ def review_window(conn, ws, legs, include_unfilled):
     ax2.set_zorder(ax.get_zorder() - 1)      # keep BTC behind the token markers
     ax.patch.set_visible(False)
     if bp:
-        ax2.plot([x for x, _ in bp], [b for _, b in bp], color="#f0883e", lw=1.2, zorder=1)
+        ax2.plot([x for x, _ in bp], [b for _, b in bp], color=COLOR, lw=1.2, zorder=1)
         anchors = [b for _, b in bp] + ([strike] if strike else [])
         lo, hi = min(anchors), max(anchors)
-        pad = max((hi - lo) * 0.35, 3.0)
+        level = abs(hi + lo) / 2 or 1.0            # pad relative to price level (not fixed $3,
+        pad = max((hi - lo) * 0.12, level * 5e-4)  # which flattened low-priced coins)
         ax2.set_ylim(lo - pad, hi + pad)
         if strike:
             ax2.axhline(strike, ls="--", color="#d4a017", lw=1.1, zorder=1)
-        ax2.set_ylabel("BTC price (USD)", color="#f0883e")
-        ax2.tick_params(axis="y", labelcolor="#f0883e")
+        ax2.set_ylabel(f"{COIN.upper()} price (USD)", color=COLOR)
+        ax2.tick_params(axis="y", labelcolor=COLOR)
         ax2.ticklabel_format(axis="y", style="plain", useOffset=False)
 
-    btc_sub = f"  —  BTC {strike:.0f} → {final:.0f}" if (strike and final) else ""
+    btc_sub = f"  —  {COIN.upper()} {pxfmt(strike)} → {pxfmt(final)}" if (strike and final) else ""
     ax.set_title(f"round {ws}  —  resolved {outcome}  —  paper pnl {pnl_total:+.2f}  "
                  f"—  targets reached {reached}/{entered}{btc_sub}")
     ax.grid(True, alpha=0.2)
@@ -188,7 +202,7 @@ def review_window(conn, ws, legs, include_unfilled):
         Line2D([], [], marker="s", color="w", markerfacecolor="gray",
                markeredgecolor="black", markersize=7, label="down order (square)"),
         Line2D([], [], color="purple", ls="--", lw=0.8, label="target (expected sell)"),
-        Line2D([], [], color="#f0883e", lw=1.2, label="BTC price"),
+        Line2D([], [], color=COLOR, lw=1.2, label=f"{COIN.upper()} price"),
     ]
     if strike:
         handles.append(Line2D([], [], color="#d4a017", ls="--", lw=1.1,

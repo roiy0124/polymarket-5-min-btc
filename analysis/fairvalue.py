@@ -28,8 +28,8 @@ def phi(x):
 def fair_up(conn, ws, horizon_s):
     """Causal fair P(Up) for one window at ~horizon_s time-left, or None."""
     snaps = conn.execute(
-        "SELECT ts, time_left, btc_binance FROM snapshots WHERE window_start=? AND "
-        "btc_binance IS NOT NULL ORDER BY ts", (ws,)).fetchall()
+        "SELECT ts, time_left, price_binance FROM snapshots WHERE window_start=? AND "
+        "price_binance IS NOT NULL ORDER BY ts", (ws,)).fetchall()
     strike = conn.execute(
         "SELECT strike_binance FROM windows WHERE window_start=?", (ws,)).fetchone()
     if not snaps or not strike or strike[0] is None:

@@ -49,7 +49,8 @@ class Leg:
 
 
 class StrategyRunner:
-    def __init__(self, manager, broker, signals, min_ev, queue_fn=None, log=None):
+    def __init__(self, manager, broker, signals, min_ev, queue_fn=None, log=None,
+                 place_gate=None):
         self.mgr = manager
         self.broker = broker
         self.min_ev = min_ev
@@ -57,6 +58,10 @@ class StrategyRunner:
         self.signals = [s for s in signals if s.get("ev", 0.0) > min_ev]
         self.queue_fn = queue_fn or (lambda token, price, side: 0.0)
         self.log = log or (lambda m: print(m, flush=True))
+        # optional runtime predicate place_gate(leg)->bool: when it returns False at
+        # the moment of placement, the leg is skipped (e.g. the nested gap condition
+        # isn't met right now). None = always place (default; phase2/live unchanged).
+        self.place_gate = place_gate
         self.windows = {}        # window_start -> list[Leg]
 
     def active_tokens(self):
@@ -85,7 +90,10 @@ class StrategyRunner:
             if elapsed > s["t2"] * 60:
                 leg.state = "MISSED"            # joined after the buy window — skip
             elif elapsed >= s["t1"] * 60:
-                self._place(leg)
+                if self.place_gate and not self.place_gate(leg):
+                    leg.state = "MISSED"         # runtime gate (e.g. gap) says not now
+                else:
+                    self._place(leg)
         elif leg.state == "PLACED":
             entry = leg.entry
             if entry is None or entry.status == OrderStatus.REJECTED:

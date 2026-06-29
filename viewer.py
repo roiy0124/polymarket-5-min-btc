@@ -16,7 +16,9 @@ import sqlite3
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.db")
+import coins
+COIN = coins.default_coin()                 # env ANALYSIS_COIN (default btc)
+DB_PATH = coins.live_db(COIN)
 REFRESH_SECONDS = 5
 
 
@@ -65,7 +67,7 @@ def gather():
         # WS activity (range counts on indexed recv_ts are fast even on huge tables)
         for key, table, span in (("book_60s", "book_events", 60),
                                   ("trade_300s", "trades", 300),
-                                  ("btc_60s", "btc_ticks", 60)):
+                                  ("btc_60s", "price_ticks", 60)):
             try:
                 d[key] = _q1(conn, f"SELECT COUNT(*) FROM {table} WHERE recv_ts > ?", (now - span,)) or 0
                 d[key + "_total"] = _q1(conn, f"SELECT MAX(id) FROM {table}") or 0
@@ -76,7 +78,7 @@ def gather():
         # live window = latest snapshot
         d["live"] = conn.execute(
             """SELECT ts_utc, window_start, time_left, up_bid, up_ask, up_mid,
-                      down_mid, btc_binance, btc_pyth
+                      down_mid, price_binance, price_pyth
                FROM snapshots ORDER BY ts DESC LIMIT 1""").fetchone()
 
         # outcome split
@@ -213,7 +215,7 @@ def render(d):
     tr.append("</table>")
 
     updated = datetime.fromtimestamp(d["now"], tz=timezone.utc).strftime("%H:%M:%S")
-    return (f'<div class="wrap"><h1>BTC Up/Down — Records</h1>'
+    return (f'<div class="wrap"><h1>{COIN.upper()} Up/Down — Records</h1>'
             f'<div class="sub"><span class="dot"></span>live · updated {updated} UTC · '
             f'auto-refresh {REFRESH_SECONDS}s</div>'
             + cards_html + live_html + "".join(rw) + "".join(tr) + "</div>")
@@ -226,7 +228,7 @@ def page():
         d = {"error": f"{type(e).__name__}: {e}"}
     return (f'<!doctype html><html><head><meta charset="utf-8">'
             f'<meta http-equiv="refresh" content="{REFRESH_SECONDS}">'
-            f'<title>BTC Up/Down Records</title><style>{CSS}</style></head>'
+            f'<title>{COIN.upper()} Up/Down Records</title><style>{CSS}</style></head>'
             f'<body>{render(d)}</body></html>')
 
 

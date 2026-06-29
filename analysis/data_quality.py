@@ -53,7 +53,7 @@ def main():
     print(f"  last snapshot: {utc(last)} UTC  ({now-last:.1f}s ago)  "
           f"-> {'OK' if now-last < 5 else 'STALLED?'}")
     for tbl, col in (("snapshots", "ts"), ("book_events", "recv_ts"),
-                     ("trades", "recv_ts"), ("btc_ticks", "recv_ts")):
+                     ("trades", "recv_ts"), ("price_ticks", "recv_ts")):
         try:
             c = q1(conn, f"SELECT COUNT(*) FROM {tbl} WHERE {col} > ?", (now - 60,))
             print(f"  {tbl:>12}: {c:>6} rows in last 60s  ({c/60:.1f}/s)")
@@ -126,7 +126,7 @@ def main():
 
     # --- WS freeze detection -------------------------------------------------
     print(f"\n[WEBSOCKET HEALTH]")
-    for tbl in ("book_events", "trades", "btc_ticks"):
+    for tbl in ("book_events", "trades", "price_ticks"):
         try:
             n2, span2, mx2, _, g5b, g30b, _ = gap_stats(conn, tbl, "recv_ts")
             if span2:

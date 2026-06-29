@@ -23,17 +23,24 @@ import sys
 import glob
 import time
 import sqlite3
+import argparse
 from datetime import datetime, timezone
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None          # degrade gracefully so a missing optional dep can't crash-loop
 
 import feeds
+import coins
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "btc_updown.db")
+DB_PATH = coins.live_db("btc")
 OUTDIR = os.path.join(HERE, "round_charts")
+COIN = "btc"                       # set in main() from --coin; used by render() for labels/color
+COLOR = coins.color("btc")
 WINDOW = 300
 INTERVAL = 5.0
 OFFICIAL_FETCH_BELOW = 25.0   # fetch official points when time-left < this (still live)
@@ -47,6 +54,15 @@ def charted(ws):
     return bool(glob.glob(os.path.join(OUTDIR, f"{ws}_*.png")))
 
 
+def pxfmt(v):
+    """Format a price with decimals adapted to its magnitude (so XRP/DOGE don't show as 1/0)."""
+    if v is None:
+        return "?"
+    a = abs(v)
+    d = 0 if a >= 1000 else 2 if a >= 10 else 4 if a >= 1 else 5 if a >= 0.01 else 6
+    return f"{v:.{d}f}"
+
+
 def render(conn, ws, official_up=None):
     row = conn.execute(
         "SELECT strike_binance, final_binance, our_outcome, resolved_outcome "
@@ -55,7 +71,7 @@ def render(conn, ws, official_up=None):
         return False
     strike, final, our, official_outcome = row
     snaps = conn.execute(
-        "SELECT time_left, up_mid, down_mid, btc_binance FROM snapshots "
+        "SELECT time_left, up_mid, down_mid, price_binance FROM snapshots "
         "WHERE window_start=? AND up_mid IS NOT NULL ORDER BY ts", (ws,)).fetchall()
     if len(snaps) < 3:
         return False
@@ -64,7 +80,7 @@ def render(conn, ws, official_up=None):
     dn = [d for _, _, d, _ in snaps]
     btc = [b for _, _, _, b in snaps]
 
-    fig, ax = plt.subplots(figsize=(7.6, 4.4), dpi=90)
+    fig, ax = plt.subplots(figsize=(7.6, 4.4), dpi=170)   # hi-res so gathered montages stay crisp on zoom
     # --- left axis: token prices (0..1) ---
     ax.plot(xs, up, color="#3fb950", lw=1.4, label="Up  (our 1/sec data)")
     if any(d is not None for d in dn):
@@ -85,21 +101,26 @@ def render(conn, ws, official_up=None):
     bx = [x for x, b in zip(xs, btc) if b is not None]
     by = [b for b in btc if b is not None]
     if by:
-        ax2.plot(bx, by, color="#f0883e", lw=1.3, label="BTC price", zorder=4)
+        ax2.plot(bx, by, color=COLOR, lw=1.3, label=f"{COIN.upper()} price", zorder=4)
         anchors = list(by) + ([strike] if strike else [])
         lo, hi = min(anchors), max(anchors)
-        pad = max((hi - lo) * 0.35, 3.0)
+        # pad RELATIVE to the price level (not a fixed $3 — that flattened low-priced
+        # coins like DOGE/XRP into a straight line). Tight enough that the actual
+        # intra-round movement fills the axis; the relative floor only matters for a
+        # near-flat round.
+        level = abs(hi + lo) / 2 or 1.0
+        pad = max((hi - lo) * 0.12, level * 5e-4)
         ax2.set_ylim(lo - pad, hi + pad)
         if strike:
             ax2.axhline(strike, ls="--", color="#d4a017", lw=1.2,
-                        label=f"target / strike  {strike:.0f}")
-        ax2.set_ylabel("BTC price (USD)", color="#f0883e")
-        ax2.tick_params(axis="y", labelcolor="#f0883e")
+                        label=f"target / strike  {pxfmt(strike)}")
+        ax2.set_ylabel(f"{COIN.upper()} price (USD)", color=COLOR)
+        ax2.tick_params(axis="y", labelcolor=COLOR)
         ax2.ticklabel_format(axis="y", style="plain", useOffset=False)
 
     outc = official_outcome or our or "pending"
     t = datetime.fromtimestamp(ws, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-    sub = f"  |  BTC {strike:.0f} -> {final:.0f}" if (strike and final) else ""
+    sub = f"  |  {COIN.upper()} {pxfmt(strike)} -> {pxfmt(final)}" if (strike and final) else ""
     ax.set_title(f"{t} UTC   resolved: {outc}{sub}")
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
@@ -123,16 +144,52 @@ def backfill(conn):
     return n
 
 
-def main():
-    os.makedirs(OUTDIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    once = "--once" in sys.argv
+def open_merged_ro(coin):
+    """Read-only in-memory connection UNION-ing windows+snapshots across the coin's live DB +
+    archives (coins.all_dbs), so BACKFILL charts EVERY resolved round -- not just the live DB's.
+    Without this, a coin whose history was archived (e.g. BTC after a reset) only charts its tiny
+    live.db and goes missing from the cross-coin gathered montages."""
+    conn = sqlite3.connect("file::memory:", uri=True)
+    dbs = [p for p in coins.all_dbs(coin) if os.path.exists(p)]
+    for i, p in enumerate(dbs):
+        conn.execute(f"ATTACH DATABASE 'file:{os.path.abspath(p)}?mode=ro' AS db{i}")
+    for tbl in ("windows", "snapshots"):
+        union = " UNION ALL ".join(f"SELECT * FROM db{i}.{tbl}" for i in range(len(dbs)))
+        if union:
+            conn.execute(f"CREATE TEMP VIEW {tbl} AS {union}")
+    return conn
 
-    n = backfill(conn)
+
+def main():
+    global OUTDIR, DB_PATH, COIN, COLOR
+    ap = argparse.ArgumentParser(description="per-round price charts for one coin")
+    ap.add_argument("--coin", default=coins.default_coin(), choices=list(coins.COINS))
+    ap.add_argument("--once", action="store_true", help="backfill existing windows and exit")
+    args = ap.parse_args()
+    COIN = args.coin
+    COLOR = coins.color(args.coin)
+    if plt is None:
+        print("chart_capture: matplotlib not installed -> charts disabled "
+              "(`pip install matplotlib`). Idling so the supervisor doesn't crash-loop.",
+              flush=True)
+        if args.once:
+            return
+        while True:
+            time.sleep(3600)
+    DB_PATH = coins.live_db(args.coin)
+    OUTDIR = os.path.join(HERE, "round_charts", args.coin)
+    os.makedirs(OUTDIR, exist_ok=True)
+
+    # BACKFILL across ALL of the coin's DBs (live + archives) so every resolved round charts --
+    # else an archived coin (e.g. BTC after a reset) goes missing from the gathered montages.
+    mconn = open_merged_ro(args.coin)
+    n = backfill(mconn)
+    mconn.close()
     print(f"chart_capture: backfilled {n} round chart(s) -> {OUTDIR}", flush=True)
-    if once:
-        conn.close()
+    if args.once:
         return
+
+    conn = sqlite3.connect(DB_PATH, timeout=10)   # live loop: new windows land in the live DB
 
     official = {}   # window_start -> official up points (fetched live near close)
     print("chart_capture: live (Ctrl-C to stop)", flush=True)

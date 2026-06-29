@@ -19,10 +19,12 @@ CREATE TABLE IF NOT EXISTS windows (
     -- strike = BTC price at window start (the "target price")
     strike_binance  REAL,
     strike_pyth     REAL,
+    strike_chainlink REAL,   -- Chainlink (the ACTUAL settlement oracle) at window start
     strike_ts       REAL,
     -- final = BTC price at window end
     final_binance   REAL,
     final_pyth      REAL,
+    final_chainlink REAL,    -- Chainlink at window end (the value the market settles on)
     final_ts        REAL,
     resolved_outcome TEXT,   -- official 'Up'/'Down' from Polymarket
     our_outcome      TEXT,   -- our calc: final >= strike ? 'Up' : 'Down'
@@ -46,8 +48,8 @@ CREATE TABLE IF NOT EXISTS snapshots (
     down_spread   REAL,
     up_book       TEXT,                 -- JSON: {"bids":[[p,s]...],"asks":[[p,s]...]}
     down_book     TEXT,
-    btc_binance   REAL,
-    btc_pyth      REAL
+    price_binance   REAL,
+    price_pyth      REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_snap_window ON snapshots(window_start);
@@ -92,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_recv ON trades(recv_ts);
 
 -- Low-latency BTC price ticks (Binance @bookTicker), event-driven on every
 -- top-of-book change -> best proxy for strike/current at the window boundary.
-CREATE TABLE IF NOT EXISTS btc_ticks (
+CREATE TABLE IF NOT EXISTS price_ticks (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     recv_ts       REAL NOT NULL,
     recv_utc      TEXT NOT NULL,
@@ -102,7 +104,7 @@ CREATE TABLE IF NOT EXISTS btc_ticks (
     mid           REAL,
     update_id     INTEGER
 );
-CREATE INDEX IF NOT EXISTS idx_btc_recv ON btc_ticks(recv_ts);
+CREATE INDEX IF NOT EXISTS idx_price_recv ON price_ticks(recv_ts);
 """
 
 
@@ -112,8 +114,19 @@ def connect(path):
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=30000")   # wait, don't fail, on a write lock
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.commit()
     return conn
+
+
+def _migrate(conn):
+    """Idempotent column adds for existing DBs (CREATE TABLE IF NOT EXISTS won't alter them). Safe to
+    run on every connect — a duplicate-column ALTER raises OperationalError, which we swallow."""
+    for col in ("strike_chainlink", "final_chainlink"):
+        try:
+            conn.execute(f"ALTER TABLE windows ADD COLUMN {col} REAL")
+        except sqlite3.OperationalError:
+            pass   # column already exists
 
 
 # ---- batch writers for the high-frequency WS streams -----------------------
@@ -135,10 +148,10 @@ def insert_trades(conn, rows):
            VALUES (?,?,?,?,?,?,?,?,?)""", rows)
 
 
-def insert_btc_ticks(conn, rows):
+def insert_price_ticks(conn, rows):
     """rows: (recv_ts, recv_utc, source, bid, ask, mid, update_id)"""
     conn.executemany(
-        """INSERT INTO btc_ticks
+        """INSERT INTO price_ticks
                (recv_ts, recv_utc, source, bid, ask, mid, update_id)
            VALUES (?,?,?,?,?,?,?)""", rows)
 
@@ -153,7 +166,7 @@ def prune_ws(path, cutoff_ts):
         cur = conn.cursor()
         cur.execute("DELETE FROM book_events WHERE recv_ts < ?", (cutoff_ts,))
         n_book = cur.rowcount
-        cur.execute("DELETE FROM btc_ticks WHERE recv_ts < ?", (cutoff_ts,))
+        cur.execute("DELETE FROM price_ticks WHERE recv_ts < ?", (cutoff_ts,))
         n_btc = cur.rowcount
         conn.commit()
         return n_book, n_btc
@@ -175,15 +188,16 @@ def upsert_window(conn, m, window_end, created_at):
     conn.commit()
 
 
-def set_strike(conn, window_start, binance, pyth, ts):
+def set_strike(conn, window_start, binance, pyth, chainlink, ts):
     conn.execute(
-        "UPDATE windows SET strike_binance=?, strike_pyth=?, strike_ts=? WHERE window_start=?",
-        (binance, pyth, ts, window_start),
+        "UPDATE windows SET strike_binance=?, strike_pyth=?, strike_chainlink=?, strike_ts=? "
+        "WHERE window_start=?",
+        (binance, pyth, chainlink, ts, window_start),
     )
     conn.commit()
 
 
-def set_final(conn, window_start, binance, pyth, ts):
+def set_final(conn, window_start, binance, pyth, chainlink, ts):
     our = None
     row = conn.execute(
         "SELECT strike_binance FROM windows WHERE window_start=?", (window_start,)
@@ -191,8 +205,9 @@ def set_final(conn, window_start, binance, pyth, ts):
     if row and row[0] is not None and binance is not None:
         our = "Up" if binance >= row[0] else "Down"
     conn.execute(
-        "UPDATE windows SET final_binance=?, final_pyth=?, final_ts=?, our_outcome=? WHERE window_start=?",
-        (binance, pyth, ts, our, window_start),
+        "UPDATE windows SET final_binance=?, final_pyth=?, final_chainlink=?, final_ts=?, our_outcome=? "
+        "WHERE window_start=?",
+        (binance, pyth, chainlink, ts, our, window_start),
     )
     conn.commit()
 
@@ -227,7 +242,7 @@ def insert_snapshot(conn, window_start, ts, ts_utc, time_left, up, down, binance
         """INSERT INTO snapshots (window_start, ts, ts_utc, time_left,
                up_bid, up_ask, up_mid, up_spread,
                down_bid, down_ask, down_mid, down_spread,
-               up_book, down_book, btc_binance, btc_pyth)
+               up_book, down_book, price_binance, price_pyth)
            VALUES (?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?, ?,?)""",
         (window_start, ts, ts_utc, time_left,
          up.get("best_bid"), up.get("best_ask"), up.get("mid"), up.get("spread"),

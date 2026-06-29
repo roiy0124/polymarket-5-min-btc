@@ -1,5 +1,6 @@
 # Execution layer deps.
 # Paper trading (exec_engine + paper_trade.py) needs only `websockets` (already
-# required by ws_collector). The LIVE path additionally needs py-clob-client.
+# required by ws_collector). The LIVE path additionally needs py-clob-client-v2.
 websockets>=12.0
-py-clob-client      # ONLY for live order placement (LiveBroker); not needed for paper
+# CLOB V2 client (V1 py-clob-client is server-rejected after the 2026-04-28 cutover).
+py-clob-client-v2   # ONLY for live order placement (LiveBroker); not needed for paper

@@ -20,17 +20,23 @@ import time
 import signal
 import subprocess
 
+import coins
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 STOP_FILE = os.path.join(HERE, "STOP")
+LOGS_DIR = os.path.join(HERE, "logs")          # all child .out.log/.err.log live here
+os.makedirs(LOGS_DIR, exist_ok=True)
 PY = sys.executable
 
-CHILDREN = [
-    # -u = unbuffered stdout so logs flush promptly to the .out.log files
-    ("collector",     [PY, "-u", "collector.py"]),
-    ("ws_collector",  [PY, "-u", "ws_collector.py"]),
-    ("viewer",        [PY, "-u", "viewer.py", "8765"]),
-    ("chart_capture", [PY, "-u", "chart_capture.py"]),
-]
+# One REST + one WebSocket collector per enabled coin (each writes its own
+# data/<coin>/live.db and its own <name>.out.log / .err.log), plus the shared
+# BTC-focused viewer + chart_capture. Trim coins.ENABLED to collect fewer.
+CHILDREN = []
+for _c in coins.ENABLED:
+    CHILDREN.append((f"collector_{_c}",    [PY, "-u", "collector.py", "--coin", _c]))
+    CHILDREN.append((f"ws_collector_{_c}", [PY, "-u", "ws_collector.py", "--coin", _c]))
+CHILDREN.append(("viewer",        [PY, "-u", "viewer.py", "8765"]))
+CHILDREN.append(("chart_capture", [PY, "-u", "chart_capture.py"]))
 
 CHECK_INTERVAL = 3.0
 BACKOFF_START = 2.0
@@ -51,12 +57,17 @@ class Child:
         self.next_start = 0.0
         self.started_at = 0.0
         self.restarts = 0
-        self.out = open(os.path.join(HERE, f"{name}.out.log"), "a", buffering=1, encoding="utf-8")
-        self.err = open(os.path.join(HERE, f"{name}.err.log"), "a", buffering=1, encoding="utf-8")
+        self.out = open(os.path.join(LOGS_DIR, f"{name}.out.log"), "a", buffering=1, encoding="utf-8")
+        self.err = open(os.path.join(LOGS_DIR, f"{name}.err.log"), "a", buffering=1, encoding="utf-8")
 
     def start(self):
         self.out.write(f"\n--- supervisor start {_ts()} ---\n")
-        self.proc = subprocess.Popen(self.cmd, cwd=HERE, stdout=self.out, stderr=self.err)
+        # On Windows, spawn each child WITHOUT its own console window (stdout/stderr
+        # already go to the .out.log / .err.log files) so 14 children don't open 14
+        # blank cmd windows. No-op on other platforms.
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        self.proc = subprocess.Popen(self.cmd, cwd=HERE, stdout=self.out, stderr=self.err,
+                                     creationflags=flags)
         self.started_at = time.time()
         print(f"[{_ts()}] started {self.name} pid={self.proc.pid}", flush=True)
 

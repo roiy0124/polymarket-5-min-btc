@@ -42,6 +42,12 @@ from .exit_maps import (entry_and_exit, wilson_lb, power_min_n, map_admit_thresh
 LOOKBACKS = [("6h", 6 * 3600), ("12h", 12 * 3600), ("24h", 24 * 3600)]
 OUT_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "signals.json")
+# Append-only archive: signals.json is overwritten each run, so every generation
+# (its signals + the floors/scope that produced it) is also appended here, one
+# JSON object per line, keyed by `generated`. Lets paper_ledger join each traded
+# leg back to the exact signal set that produced it (epoch analysis).
+HISTORY_JSONL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             "signals_history.jsonl")
 
 
 def load(conn):
@@ -280,13 +286,18 @@ def main():
               "or collect more data.")
         return
     print_signals(signals)
+    record = {"generated": now, "min_win": args.min_win, "min_roi": args.min_roi,
+              "min_ev": args.min_ev, "min_entry": args.min_entry,
+              "min_dots": args.min_dots, "min_frac": args.min_frac,
+              "alpha": args.alpha, "power": args.power, "usd": args.usd,
+              "scope_days": os.environ.get("BTC_ANALYSIS_DAYS"),   # data window used
+              "n_windows": len(windows), "signals": signals}
     with open(OUT_JSON, "w") as f:
-        json.dump({"generated": now, "min_win": args.min_win, "min_roi": args.min_roi,
-                   "min_ev": args.min_ev, "min_entry": args.min_entry,
-                   "min_dots": args.min_dots, "min_frac": args.min_frac,
-                   "alpha": args.alpha, "power": args.power,
-                   "usd": args.usd, "signals": signals}, f, indent=2)
-    print(f"\n  saved -> {OUT_JSON}  (Phase 2 will consume this after you validate)")
+        json.dump(record, f, indent=2)
+    with open(HISTORY_JSONL, "a") as f:          # append-only; never overwritten
+        f.write(json.dumps(record) + "\n")
+    print(f"\n  saved -> {OUT_JSON}  (+ archived this generation to "
+          f"{os.path.basename(HISTORY_JSONL)})")
     print("  EV/$1 = worst-case-win x ROI - (1 - worst-case-win); >0 means profitable.")
     print("  CAVEAT: mid-based win-rates -> optimistic vs live fills (adverse selection).")
 

@@ -16,20 +16,19 @@ Run:
 Stop with Ctrl-C. Data goes to btc_updown.db (SQLite). Inspect with peek.py.
 """
 
-import os
 import time
 import signal
 import sys
+import argparse
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
+import coins
 import feeds
 import storage
 
 # ---- tunables ----------------------------------------------------------------
-# Anchor the DB to this script's folder so it's the same file no matter what
-# directory the collector / peek.py is launched from.
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "btc_updown.db")
+# The DB path is per-coin (coins.live_db(coin)); resolved in main() from --coin.
 WINDOW_SECONDS = 300            # 5 minutes
 POLL_INTERVAL = 1.0            # normal cadence (seconds)
 TAIL_SECONDS = 20.0            # within this much of the close, poll faster
@@ -53,13 +52,13 @@ def now_window(t):
     return start, start + WINDOW_SECONDS
 
 
-def fetch_tick(pool, market):
+def fetch_tick(pool, market, symbol, pyth_id):
     """Fetch the four sources concurrently. Each may fail independently."""
     futs = {
         "up": pool.submit(feeds.fetch_book, market["token_up"]),
         "down": pool.submit(feeds.fetch_book, market["token_down"]),
-        "binance": pool.submit(feeds.fetch_binance),
-        "pyth": pool.submit(feeds.fetch_pyth),
+        "binance": pool.submit(feeds.fetch_binance, symbol),
+        "pyth": pool.submit(feeds.fetch_pyth, pyth_id),
     }
     out = {}
     for key, fut in futs.items():
@@ -70,14 +69,39 @@ def fetch_tick(pool, market):
     return out
 
 
+def latest_chainlink(conn, max_age=12.0):
+    """Most recent Chainlink price the WS collector streamed into price_ticks(source='chainlink'),
+    if fresh (<= max_age s). Cross-process bridge: ws_collector owns the Chainlink stream; the REST
+    collector reads its latest tick at strike/final time to record the true settlement-oracle value."""
+    try:
+        row = conn.execute(
+            "SELECT mid, recv_ts FROM price_ticks WHERE source='chainlink' "
+            "ORDER BY recv_ts DESC LIMIT 1").fetchone()
+    except Exception:
+        return None
+    if row and row[0] is not None and (time.time() - row[1]) <= max_age:
+        return row[0]
+    return None
+
+
 def main():
+    ap = argparse.ArgumentParser(description="5-min up/down REST collector (one coin)")
+    ap.add_argument("--coin", default="btc", choices=list(coins.COINS),
+                    help="which coin's market to collect (default btc)")
+    args = ap.parse_args()
+    coin = args.coin
+    symbol = coins.binance_symbol(coin)
+    pyth_id = coins.get(coin).pyth_id
+    coins.ensure_dirs(coin)
+    db_path = coins.live_db(coin)
+
     signal.signal(signal.SIGINT, _stop)
     try:
         signal.signal(signal.SIGTERM, _stop)
     except (ValueError, AttributeError):
         pass
 
-    conn = storage.connect(DB_PATH)
+    conn = storage.connect(db_path)
     pool = ThreadPoolExecutor(max_workers=4)
 
     cur_start = None
@@ -98,7 +122,7 @@ def main():
     if pending_settle:
         print(f"backfilling settlement for {len(pending_settle)} closed window(s)", flush=True)
 
-    print(f"collector started -> {DB_PATH}  (Ctrl-C to stop)", flush=True)
+    print(f"collector[{coin}] started -> {db_path}  (Ctrl-C to stop)", flush=True)
 
     while _running:
         loop_t = time.time()
@@ -122,7 +146,7 @@ def main():
             # fetch the new live market's token ids (retry a few times)
             for attempt in range(3):
                 try:
-                    market = feeds.fetch_market(start)
+                    market = feeds.fetch_market(start, coin)
                 except Exception:
                     market = None
                 if market:
@@ -155,7 +179,7 @@ def main():
 
         try:
             if market is not None:
-                tick = fetch_tick(pool, market)
+                tick = fetch_tick(pool, market, symbol, pyth_id)
                 up = tick["up"] or {}
                 down = tick["down"] or {}
                 binance = tick["binance"]
@@ -166,16 +190,16 @@ def main():
 
                 # strike = first reading near the start of the window
                 if not strike_set and time_left >= STRIKE_MIN_LEFT and binance is not None:
-                    storage.set_strike(conn, start, binance, pyth, loop_t)
+                    storage.set_strike(conn, start, binance, pyth, latest_chainlink(conn), loop_t)
                     strike_set = True
 
                 # final = last reading just before the close
                 if not final_set and time_left <= 1.0 and binance is not None:
-                    storage.set_final(conn, start, binance, pyth, loop_t)
+                    storage.set_final(conn, start, binance, pyth, latest_chainlink(conn), loop_t)
                     final_set = True
 
             # --- settle closed windows ----------------------------------------
-            _settle(conn, pending_settle, loop_t)
+            _settle(conn, pending_settle, loop_t, coin)
         except Exception as e:
             # never let a transient DB/network error kill the collector
             print(f"[{time.strftime('%H:%M:%S')}] loop error (continuing): {e!r}", flush=True)
@@ -190,7 +214,7 @@ def main():
     print("stopped.", flush=True)
 
 
-def _settle(conn, pending, now):
+def _settle(conn, pending, now, coin):
     done = []
     for ws, info in pending.items():
         if now < info["next_try"]:
@@ -199,7 +223,7 @@ def _settle(conn, pending, now):
             done.append(ws)
             continue
         try:
-            m = feeds.fetch_market(ws)
+            m = feeds.fetch_market(ws, coin)
             outcome = feeds.resolution_from_market(m)
         except Exception:
             outcome = None
