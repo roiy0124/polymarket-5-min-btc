@@ -255,6 +255,12 @@ A short `timeout`/Ctrl-C run is enough to smoke-test; if a run crosses a
 
 ## Research state (read before proposing strategy work)
 
+**START HERE — the canonical final docs (2026-06-29):** **`VERDICT.md`** = the final result (the WALL) +
+why this product is structurally a casino-roulette, not a skilled-trading scenario (efficient maker prices
+out information, fee taxes out the residual, −100% binary, high spin-rate; skill-PROOFED not skill-LESS).
+**`FIELD-NOTES.md`** = the transferable, categorized principles the journey produced (the durable asset).
+`POSTMORTEM.md` = every candidate through the corrected gate. Read those before re-proposing any edge.
+
 The full strategy-research log is in **`EXPERIMENTS.md`** (+ agent memory). Short version,
 on BTC: **no profitable retail edge found.** Passive resting-limit variants die to adverse
 selection. The fair-value **TAKER** has a real ~1s lead over the quote, but the bid-ask
