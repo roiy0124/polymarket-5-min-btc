@@ -54,7 +54,7 @@ repo, apply ALL of the following BY DEFAULT, without being prompted each time. T
 
 Durable tooling already built for this (reuse, don't reinvent): `analysis/stats.py` (the gate),
 `analysis/adaptive.py` (self-normalizing + drift monitor), `analysis/gate_open_ideas.py`,
-`analysis/factor_inventory.py`, `net_ev.py` (fee authority), `experiment_overround_gate.py` (the template:
+`analysis/factor_inventory.py`, `net_ev.py` (fee authority), `experiments/experiment_overround_gate.py` (the template:
 candidate + joint-control + adaptive + monitor). See the "Research state" section below for what is already
 WALLED (don't re-run) vs the live candidates.
 
@@ -79,6 +79,25 @@ These encode the standing method above. **Use them by default for the matching t
 
 Default flow for a new idea: re-query the kill-list (`quant` `05-battle-scars`) → if walled-family with no
 structural difference, KILL-ON-PRIORS; else `vet-idea` → cheapest measurement → `second-mind` on any positive.
+
+## Repo layout (reorganized 2026-07-02 — READMEs in each folder)
+
+Root holds ONLY the collector pipeline + the canonical docs. Everything else is foldered:
+
+- **Root docs:** `README.md` (public landing page — the story/results), `VERDICT.md`, `POSTMORTEM.md`,
+  `FIELD-NOTES.md`, `CLAUDE.md`. All other .md logs moved to **`docs/`** (EXPERIMENTS, IDEAS,
+  MAKER-MODEL, RESEARCH-EXTERNAL, STRATEGY-*, maker_behavior, …).
+- **`experiments/`** — all on-market experiment harnesses (`experiment_*.py`, `validate_b_riskfilter.py`,
+  `phase0_fit.py`, `correlation_lab.py`). It is a package: `experiments/__init__.py` puts repo root +
+  the folder itself on `sys.path`, so both `python experiments/foo.py` and
+  `from experiments.foo import ...` work. NEW experiments go here (with the same repo-root shim).
+- **`execution/`** — the gated executors (`live_runner.py`, `paper_trade.py`, `phase2.py`,
+  `phase2_nested.py`); the `exec_engine/` package stays at root. `menu.py` paths updated.
+- **`side_quests/`** — off-market research harnesses (Kalshi scout, NQ/ES SMT break, the whale-project
+  copy-trading/bet-size tests).
+- Unchanged: `analysis/`, `dead_ends/`, `ideas_old/`, `winning_strategies/`, `shared_tools/`, `data/`.
+- Moved scripts carry a `sys.path.insert(0, <repo root>)` shim; cross-imports of experiment modules from
+  `analysis/` use the `experiments.` package prefix (e.g. `from experiments.experiment_fear_dip import …`).
 
 ## Architecture: HYBRID (WebSocket primary + REST fallback)
 
@@ -261,7 +280,7 @@ out information, fee taxes out the residual, −100% binary, high spin-rate; ski
 **`FIELD-NOTES.md`** = the transferable, categorized principles the journey produced (the durable asset).
 `POSTMORTEM.md` = every candidate through the corrected gate. Read those before re-proposing any edge.
 
-The full strategy-research log is in **`EXPERIMENTS.md`** (+ agent memory). Short version,
+The full strategy-research log is in **`docs/EXPERIMENTS.md`** (+ agent memory). Short version,
 on BTC: **no profitable retail edge found.** Passive resting-limit variants die to adverse
 selection. The fair-value **TAKER** has a real ~1s lead over the quote, but the bid-ask
 spread caps it at ~breakeven and Polymarket's confirmed dynamic **taker fee**
@@ -271,20 +290,20 @@ price already prices it). All measured with window-clustered bootstrap CIs.
 
 Current direction: **cross-asset / SMT across the six coins** — do sleepier alts lag, or
 lead each other, enough to clear the fee? That is *why* the multi-coin collection exists.
-`live_runner.py` stays **gated** and must NOT be armed until an edge clears validation.
+`execution/live_runner.py` stays **gated** and must NOT be armed until an edge clears validation.
 
-**UPDATE 2026-06-23 (full idea audit + combination program — see `STRATEGY-FAVORITE-TAIL.md`):**
-Best strategy = **favorite-tail taker, hold-to-resolution** (`experiment_favorite_tail.py`) — causal,
+**UPDATE 2026-06-23 (full idea audit + combination program — see `docs/STRATEGY-FAVORITE-TAIL.md`):**
+Best strategy = **favorite-tail taker, hold-to-resolution** (`experiments/experiment_favorite_tail.py`) — causal,
 real-time-implementable, but **BREAKEVEN** (pooled +0.005/$1, CI incl 0). Every idea was tested both
 standalone AND as a *component/gate* on it; all dead except ONE live thread: the **BTC-opposing
-risk-filter** (`experiment_b_component.py`) — skip an alt favorite-tail entry when BTC's last ~15s move
+risk-filter** (`experiments/experiment_b_component.py`) — skip an alt favorite-tail entry when BTC's last ~15s move
 opposes the favorite. First genuinely directional signal (permutation p=0.002, all-coin/LOCO) but NOT
 deployable yet (its Wilson pass hangs on a 1-loss subset over ~25h). **PRE-REGISTERED** (memory
-`b-riskfilter-preregistered`); re-test with **`validate_b_riskfilter.py`** (params LOCKED; `--all` =
+`b-riskfilter-preregistered`); re-test with **`experiments/validate_b_riskfilter.py`** (params LOCKED; `--all` =
 in-sample dry-run) after ~2–4 weeks more data. `net_ev.py` = the fee-aware EV helper. No new collection
 needed — just keep the running supervisor (don't start a 2nd = dup rows). **Proven-dead experiments are
-archived in `dead_ends/`** (see its README); the dead executors (`phase2*.py`, `paper_trade.py`) stay in
-root for `menu.py`, with `phase2_nested.py` bridging to the archived shared libs.
+archived in `dead_ends/`** (see its README); the dead executors (`phase2*.py`, `execution/paper_trade.py`) stay in
+root for `menu.py`, with `execution/phase2_nested.py` bridging to the archived shared libs.
 
 **UPDATE 2026-06-24 (TWO-STAGE validation + deep spot history — see `winning_strategies/` + memory
 `spot-history-two-stage-validation`):** The cross-asset SMT signal is split into **Stage 1 = does it EXIST/is it
@@ -297,7 +316,7 @@ windows/coin) AND across 35 (coin×framing) robustness cells**; sign is POSITIVE
 seesaw's hourly-negative). Kills the non-stationarity worry. **BUT this is signal-existence = the UPPER BOUND, NOT
 EV**: the alt quote prices most of it (alt-own move, the strongest predictor, is mechanical/already in the ask),
 so Stage-2 (does BTC's lead add value *beyond* the priced favorite) still needs live data = exactly the
-pre-registered **B risk-filter** (`validate_b_riskfilter.py`, LOCKED). New **`winning_strategies/`** folder = the
+pre-registered **B risk-filter** (`experiments/validate_b_riskfilter.py`, LOCKED). New **`winning_strategies/`** folder = the
 honest tiered roster (Tier 1 deployable-winner = empty; Tier 2 = favorite-tail proven-causal-breakeven; Tier 3 =
 B risk-filter + spot lead-lag, pre-registered). `live_runner` stays GATED.
 
@@ -306,7 +325,7 @@ PARKED in `ideas_old/` — its FOLLOW flip (buy Down on an alt token dumping un-
 **real all-6-coin signal (resid +0.055) that is only fee-capped**, not dead. **Re-check it** (`python
 ideas_old/experiment_token_fear.py --follow`) when `n_fired ≳ 1800` (~a few more months of the collector) OR if
 the 5-min taker fee drops / a fee-free maker-Down entry works / Down spreads tighten — viable iff
-Wilson-LB(win)>breakeven AND placebo p<0.05 (params LOCKED, no re-tune). See `IDEAS.md` "Revisit watchlist" +
+Wilson-LB(win)>breakeven AND placebo p<0.05 (params LOCKED, no re-tune). See `docs/IDEAS.md` "Revisit watchlist" +
 `ideas_old/fear-stock-sell.md`. New folders this session: `winning_strategies/` (roster), `shared_tools/`
 (reusable primitives index), `ideas_old/` (parked ideas), plus `analysis/spot_data.py` + `analysis/cross_asset_factor.py`.
 
@@ -332,10 +351,10 @@ read pre-entry flow at window-open where it's structurally `None`); removing it 
 and is **−0.365/$1** from mechanical adverse selection (fill model itself optimistic → upper bound) = DEAD, not
 "could not settle". **B risk-filter** — FALSIFIED: the alt's OWN 15s move gates better than BTC's and the
 cross-asset component is negative, so it's a generic favorite-momentum filter, not a BTC lead (now CHECK 5 in
-`validate_b_riskfilter.py`). **Token-fear FOLLOW** — signal REAL at the mid (resid +0.052, cluster-p=0.008, all
+`experiments/validate_b_riskfilter.py`). **Token-fear FOLLOW** — signal REAL at the mid (resid +0.052, cluster-p=0.008, all
 6 coins) but fee-capped → FAILS net; only a fee-free maker-Down entry could flip it (parked, n≳1800). **Spike-fade**
 — DEAD (no dose-response across z; falling-knife fail). Net: the wall is *stronger*, every open corner now closed.
-Fixed `experiment_maker_noise.py` (book-depth-imbalance gate, reports the kill) + `validate_b_riskfilter.py`.
+Fixed `experiments/experiment_maker_noise.py` (book-depth-imbalance gate, reports the kill) + `experiments/validate_b_riskfilter.py`.
 
 Future drop-ins (when asked): a **Chainlink** price adapter in `feeds.py` to match
 resolution exactly; verified alt-specific tooling.

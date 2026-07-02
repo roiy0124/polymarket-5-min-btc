@@ -11,7 +11,7 @@ import numpy as np
 
 import coins
 from analysis import stats as S
-from experiment_favorite_tail import load as ft_load
+from experiments.experiment_favorite_tail import load as ft_load
 
 
 def report(label, asks, wons, wsids, n_trials=S.N_PROGRAM):
@@ -41,8 +41,8 @@ def audit_spike_fade():
     print("\n" + "=" * 80); print("SPIKE-GATED FADE  (the newest candidate)  token drop<=-0.05 & spot z<-3")
     print("=" * 80)
     try:
-        from experiment_fear_dip import load_all
-        from experiment_spike_fade import spot_z_lookups, scan
+        from experiments.experiment_fear_dip import load_all
+        from experiments.experiment_spike_fade import spot_z_lookups, scan
         data, meta = load_all(coins.ENABLED)
         lk = spot_z_lookups("2026-06", 300.0)
         _, spike_dumps, _ = scan(data, meta, lk, 0.05, 3.0, (0.20, 0.85))

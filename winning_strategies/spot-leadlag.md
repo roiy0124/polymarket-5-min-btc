@@ -61,7 +61,7 @@ decide) — but the **sign is never framing-fragile.** Not a knife-edge artifact
 
 ## Stage 2 — what would promote this to Tier 1 (needs LIVE Polymarket data, can't be spot-tested)
 The incremental value of the BTC-lead over the already-priced favorite is exactly the **B risk-filter** hypothesis,
-already PRE-REGISTERED with LOCKED params: `validate_b_riskfilter.py` (skip an alt favorite-tail entry when BTC's
+already PRE-REGISTERED with LOCKED params: `experiments/validate_b_riskfilter.py` (skip an alt favorite-tail entry when BTC's
 last ~15s move opposes the favorite). Re-evaluate after ≥2–4 weeks more live data accrue ≥30–50 alt losers.
 **Pre-registered here:** the spot signal direction is **positive BTC-lead, all 5 alts, robust over d∈[15,120]s and
 H∈[10,60]s** — so Stage 2 must not re-mine a sign/threshold; it only tests whether this locked, real signal beats

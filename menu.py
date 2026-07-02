@@ -207,7 +207,7 @@ def a_phase2():
         print("  Start them (option 17) first, or it will just idle.")
     print("\n  (PAPER forward-test of the NESTED strategy -- nothing real is traded;")
     print("   re-fits every 30 min; appends paper_nested_trades.csv. Ctrl-C to stop.)")
-    run([PY, "phase2_nested.py"])
+    run([PY, os.path.join("execution", "phase2_nested.py")])
 
 
 def a_paper_ledger():
@@ -227,7 +227,7 @@ def a_paper():
     s = ask("size (shares)", 30)
     x = ask("exit/target price", 0.33)
     print("  (paper only -- Ctrl-C to stop and return to the menu)")
-    run([PY, "paper_trade.py", "--outcome", o, "--price", p, "--size", s, "--exit", x])
+    run([PY, os.path.join("execution", "paper_trade.py"), "--outcome", o, "--price", p, "--size", s, "--exit", x])
 
 
 def a_dashboard():

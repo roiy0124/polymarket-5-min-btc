@@ -62,7 +62,7 @@ so old import paths keep working.
 Ordered by call-site count. Proposed homes: a new **`analysis/stats.py`** (pure stats) and **`analysis/loaders.py`**
 (multi-coin DB access), each **re-exporting** existing names so current imports keep working.
 
-1. **Fee curve `0.07·a·(1−a)` — 4+ re-definitions** (`experiment_favorite_tail.py:69`, `experiment_b_component.py:198`, `dead_ends/experiment_favtail_adaptive.py:45`, inline `experiment_favorite_tail.py:125`). → delete all; `from net_ev import taker_fee_per_stake`.
+1. **Fee curve `0.07·a·(1−a)` — 4+ re-definitions** (`experiments/experiment_favorite_tail.py:69`, `experiments/experiment_b_component.py:198`, `dead_ends/experiment_favtail_adaptive.py:45`, inline `experiments/experiment_favorite_tail.py:125`). → delete all; `from net_ev import taker_fee_per_stake`.
 2. **`wilson_lb` — 3 implementations** (`net_ev.py:70` authoritative, `analysis/exit_maps.py:52` z=1.0, `dead_ends/...adaptive.py:35`). → keep `net_ev`; `exit_maps` imports it and passes `z=WILSON_Z`; drop the dead-ends copy.
 3. **Window-clustered bootstrap CI — 5+ hand-rolls** (favorite_tail, b_component:109, favtail_adaptive:115, spot_leadlag:129, calibration_test:85, validate_b_riskfilter). → one `analysis/stats.py:bootstrap_ci(data, fn, B=5000, alpha=0.05, cluster_key=None, seed=1)`.
 4. **Multi-coin loader boilerplate — 7+ experiments** (the `for db in coins.all_dbs(coin): connect; query windows+snapshots` loop). → `analysis/loaders.py:iter_windows(coin, filters)` + `load_snapshots(coin, ws, cols)`; reuse `panel`'s ATTACH-merge.

@@ -12,7 +12,7 @@ gap — we *built* the missing rigor (`analysis/stats.py`) and the conclusion on
 > deflated-Sharpe null predicts, and they vanished under an honest test.
 
 Full evidence trail: **`POSTMORTEM.md`** (every candidate through the corrected gate), **`FIELD-NOTES.md`**
-(the transferable method this produced), `EXPERIMENTS.md` + `dead_ends/` (the kills), `analysis/stats.py`
+(the transferable method this produced), `docs/EXPERIMENTS.md` + `dead_ends/` (the kills), `analysis/stats.py`
 (the gate), `feeds.fetch_fee_schedule` (the live-verified fee).
 
 ---

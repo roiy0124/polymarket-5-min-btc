@@ -58,11 +58,11 @@ change how often it fires).
 - **Fee-free maker-Down entry.** Rest a maker BUY on the DOWN token at `down_mid`/`down_bid` instead of crossing
   the ask. The +0.052 gross-**mid** edge clears breakeven with no taker fee. This is the principled variant (not a
   re-tune) and the single most likely path to viability — but it needs live maker-fill modeling, and must beat the
-  adverse selection the passive branch lost to (cf. `experiment_maker_noise.py`: a naive resting bid is −0.36).
+  adverse selection the passive branch lost to (cf. `experiments/experiment_maker_noise.py`: a naive resting bid is −0.36).
 - **More data.** Today Wilson-LB(win) 0.555 < breakeven 0.575; if the win-rate holds, the LB crosses breakeven at
   **n_fired ≈ 1800** (~a few more months of the running collector). Re-run LOCKED; VIABLE iff Wilson-LB > breakeven
   AND placebo p < 0.05 AND the cluster-CI excludes 0 — or it REGRESSES (confirmed dead).
 - **Fee drop / tighter Down spreads** — re-test immediately if the 5-min taker fee falls; ~halving it likely flips it +EV.
 
 **Do NOT** re-tune drop/gap/peer-tol/band (overfit trap — see memory `reversion-fear-dip-idea`, the FADE direction
-already died this way). `live_runner.py` stays GATED until a clean pre-registered OOS / maker-entry pass.
+already died this way). `execution/live_runner.py` stays GATED until a clean pre-registered OOS / maker-entry pass.

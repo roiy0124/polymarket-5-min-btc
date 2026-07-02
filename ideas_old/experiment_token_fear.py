@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) 
 
 import coins
 from net_ev import net_ev_per_dollar, breakeven_winrate, wilson_lb
-from experiment_fear_dip import GRID, TOL
+from experiments.experiment_fear_dip import GRID, TOL
 
 
 def load_sides(coins_list):

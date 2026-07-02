@@ -51,7 +51,7 @@ and adversarially reviewed by an independent second-mind agent. All four resolve
   imbalance) lifts it merely to −0.285 at strong bid support — nowhere near the ~0.485 breakeven. The fee-free
   corner is **DEAD**; the postmortem's *conclusion* (corner unviable) survives — only its *reason* was wrong.
 - **B risk-filter — cross-asset story FALSIFIED, not merely "wait for data."** Forward gated EV is still
-  negative (−0.0019). The decisive new test (now CHECK 5 in `validate_b_riskfilter.py`): replace BTC's last-15s
+  negative (−0.0019). The decisive new test (now CHECK 5 in `experiments/validate_b_riskfilter.py`): replace BTC's last-15s
   move with the **alt's OWN** last-15s move as the gate. Own-momentum gates **strictly better** (+0.0091 vs
   B's +0.0052 in-sample; +0.0027 vs −0.0019 forward), and the "pure cross-asset" component (BTC net of own) is
   the **worst** of the three. In the subset where B uniquely keeps (own-momentum says skip), B keeps **losers**
@@ -75,7 +75,7 @@ and adversarially reviewed by an independent second-mind agent. All four resolve
 
 ### 1c. Conditional σ-lag (Thread A of the maker-component program) — 2026-06-27, second-mind reviewed
 
-The "predict the maker's INPUTS not its OUTPUT" program (see `maker_behavior.md`) put the **σ component**
+The "predict the maker's INPUTS not its OUTPUT" program (see `docs/maker_behavior.md`) put the **σ component**
 first: not the *average* σ-error (self-priced VRP, already dead) but a **conditional** one — does the maker's
 σ go STALE for a beat after a fast vol-regime change, leaving the favorite under-priced for flip risk?
 (`dead_ends/experiment_sigma_lag.py` + `_probe.py`.) It looked alive: a clean monotone dose-response (EV
@@ -116,7 +116,7 @@ measure within-winners before reading any tl-window ask-rise as "mechanical".* T
 maker's σ string" corner entirely; only **Thread B (settlement feed), data-gated**, remains open.
 
 ### 1d. Conditional-skew model-FORM residual (the field-research program's one testable lead) — 2026-06-28, second-mind reviewed
-The field-by-field deep-research program (`RESEARCH-EXTERNAL.md` "PHASE 1", 7 field briefs + synthesis) surfaced
+The field-by-field deep-research program (`docs/RESEARCH-EXTERNAL.md` "PHASE 1", 7 field briefs + synthesis) surfaced
 **exactly one** new on-data candidate: the maker's quote `Φ(d)` is a **symmetric, driftless Gaussian**, and option
 theory says the true digital = `Φ(d2) − vega·dσ/dK`, so a symmetric Φ **omits a 3rd-moment (skew) term**. Unlike
 σ-level (which the maker re-fits → self-priced), a single σ *cannot* encode the 3rd moment, so a skew residual
@@ -162,7 +162,7 @@ the field-research program has **no remaining testable-now candidate**; the only
 **Maker liquidity-provision in mid-price "noise" windows** is the only theoretically-open cell (fee-free
 + rebate). The quality audit correctly noted it's testable *in principle* — the `queue_ahead` fill-model
 engine exists (`analysis/backtest.py`) and `book_events` carries the depth. So we built it
-(`experiment_maker_noise.py`: rest a maker bid in p∈[0.35,0.65] low-toxicity windows, model the fill from
+(`experiments/experiment_maker_noise.py`: rest a maker bid in p∈[0.35,0.65] low-toxicity windows, model the fill from
 the real book + SELL prints, hold to 0/1, credit the rebate, no taker fee) and ran it through the gate.
 
 **Result (CORRECTED 2026-06-25): the cell is NOT empty — it is DEAD by adverse selection.** The original
@@ -212,6 +212,6 @@ to net EV past the quote + fee.
 > every translation net-negative — efficient on knowledge **and** walled on execution.
 
 *Evidence (all committed): `analysis/stats.py` (the rigor module), `analysis/audit_candidates.py`,
-`experiment_residual_basket.py`, `experiment_maker_noise.py`, `experiment_fear_dip_variants.py`,
+`experiments/experiment_residual_basket.py`, `experiments/experiment_maker_noise.py`, `experiments/experiment_fear_dip_variants.py`,
 `feeds.fetch_fee_schedule`; memory `program-walled-verdict`, `best-strategy-favorite-tail`,
 `market-efficient-no-knowledge-edge`. Past-experiment audit: wf_08502ec3 (25 experiments graded).*

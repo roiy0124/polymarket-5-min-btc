@@ -1,123 +1,107 @@
-# BTC Up/Down 5-Minute Collector
+# Is there a retail edge in Polymarket's 5-minute crypto markets?
 
-Captures a clean, high-frequency time series for Polymarket's **Bitcoin Up or Down
-(5-minute)** markets, so the data can later be mined for a statistically profitable
-limit-order strategy.
+**Answer, after a full research program: NO — and this repo is the honest proof.**
 
-Right now this project **only gathers data** — it does not trade.
+This is a complete, self-contained quant research program on Polymarket's *"Bitcoin (and ETH/SOL/XRP/DOGE/BNB) Up or Down — 5 minute"* markets: a purpose-built high-frequency data collector, ~40 experiment harnesses, a proper statistical rigor module, and the final verdict — **the market is walled for retail takers**. Every candidate edge fails an honest test once you charge the verified live fee, respect the −100%-on-miss binary payoff, deflate for the hundreds of configurations tried, and use the effective (clustered) sample size.
 
-## What it captures
+We are publishing the *negative* result on purpose. Almost nobody does, which is exactly why so many people keep re-losing money on the same ideas. If you are thinking about trading these markets — or building a bot for them — the tables below are the several months of work you don't have to repeat.
 
-For the *currently live* 5-minute market, every ~1 second (faster in the final 20s):
+> **One-line verdict:** the product is a near-efficient casino with a built-in house edge, not a venue where prediction skill converts into profit. The signal is real; it is *pre-priced and fee-taxed* out of reach. Full argument: [`VERDICT.md`](VERDICT.md).
 
-| Field | Meaning |
-|-------|---------|
-| `time_left` | seconds until the window resolves |
-| Up / Down odds | best bid, best ask, mid, spread + top-10 order-book depth per outcome |
-| target price (`strike`) | BTC price at the **start** of the window |
-| current price | BTC price right now (Binance + Pyth) |
-| resolution | official `Up`/`Down` once the window settles |
+---
 
-## How "next market" auto-switching works
+## The headline results
 
-No scraping or redirect logic. The market slug **is** the window-start Unix
-timestamp (e.g. `btc-updown-5m-1781833800` started at `1781833800` =
-2026-06-18 21:50 ET), and each window is exactly 300 seconds. So the live window
-is always `floor(now/300)*300`. When the 5-minute clock rolls over, the collector:
+Every candidate, through the corrected statistical gate (`analysis/stats.assess`: fee-aware net EV, window-clustered bootstrap, multiplicity-deflated, ≥30 losers required):
 
-1. recomputes the new window, builds the new slug, fetches the new market's token IDs,
-2. starts capturing it immediately,
-3. settles the window that just closed (records final price + official Up/Down).
+| Candidate strategy | n | mean net-EV / $1 | deflated p | Verdict |
+|---|---:|---:|---:|---|
+| **Favorite-tail taker** (buy the ≥0.95 favorite, hold) | 1849 | −0.0029 | 1.00 | FAILS — looked "breakeven" for weeks; 4/6 coins negative |
+| **Cross-asset (BTC-lead) risk filter** | 449 | −0.0019 | 1.00 | FALSIFIED — the alt's *own* momentum explains it entirely |
+| **Token-fear FOLLOW** (buy Down on an informed dump) | 599 | +0.024 | 1.00 | Signal **real at the mid** (+0.052, p=0.008, all 6 coins) — killed by spread + fee |
+| **Maker in noise windows** (fee-free + rebate) | 2254 | −0.365 | — | DEAD — mechanical adverse selection; your bid fills exactly when you're wrong |
+| **Residual market-neutral basket** | 34 | −0.092 | 1.00 | FAILS — pays the taker fee twice |
+| **Reversion (dip / peer-surge / spike-fade)** | — | ≤ 0 | 1.00 | DEAD — the "panic" was correct repricing, not fear |
+| **σ-staleness / vol-lag / skew model-form** | — | ≤ 0 | 1.00 | DEAD — priced latency-lag + outcome-mix confounds |
+| **Spot cross-asset lead-lag** (5.5 yrs, 575k windows/coin) | 575k | — | — | Predictor is REAL (r≈+0.12, 100% sign-stable) — and fully priced in the quote |
 
-This runs forever with no manual step.
+Full evidence trail with every number: [`POSTMORTEM.md`](POSTMORTEM.md). Full chronological lab log: [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md).
 
-## Run
+## Why the market is unbeatable (for a retail taker)
 
-**Easiest: the operator menu.**
+Four structural walls, measured — not assumed:
+
+1. **A fair-value market-maker is home.** One bot quotes both sides as a digital option `Φ(ln(spot/strike)/(σ√t))` off the public Binance feed at **R²=0.91**, requoting sub-second. The Up and Down books are one synthetic mirror (down ≈ 1−up in 75–81% of snapshots). Every public predictor — trend, momentum, cross-asset lead — is already in the price: the outcome is *predictable* (BTC's 15s move correlates ~+0.4 with the result) but the *residual* (outcome − price) is ~0. Predicting reality ≠ beating the price.
+2. **The fee is calibrated to the edge.** The verified live taker fee `0.07·p·(1−p)` per share (~3.5% of stake at p≈0.5) was introduced by Polymarket *explicitly* to neutralize the latency arbitrage bots had been extracting. The one real inefficiency we measured — a ~1s quote lag worth ~+0.6%/$1 per second — lives exactly where the fee bites hardest. This is Grossman-Stiglitz efficiency in the wild: the residual is sized to the cost of harvesting it.
+3. **The payoff is −100% binary.** Each market resolves 0 or 1 every 5 minutes (~288 spins/day/coin). The return stream is severely negatively skewed (favorite-tail skew −6.8), so the sample mean lies: a "+0.5% breakeven" is mildly negative once the tail is priced.
+4. **The only non-taker role is a trap.** The maker rebate is capped ~0.4%/$1 and resting bids are adverse-selected by construction (Glosten-Milgrom): modeled fill-conditional EV was **−0.365/$1** — with an *optimistic* fill model.
+
+The interesting nuance: this makes the product **skill-proofed, not skill-less** — the roulette analogy and where it breaks is worked through in [`VERDICT.md`](VERDICT.md).
+
+## How we fooled ourselves (and got caught)
+
+The difficulties were not data plumbing — they were statistical self-deceptions. Every one of these looked like a real edge at first:
+
+| The mirage | What it really was |
+|---|---|
+| "+0.08 residual, 97.7% win, p=0.006" — the strongest result of the whole program | Loss-light sample + convergence + look-ahead. Died with more data. |
+| Favorite-tail "breakeven, +0.005/$1" | <30 losers → degenerate CI. Regressed to −0.0029 as losers accrued. |
+| B-filter "first real cross-asset signal, permutation p=0.002" | Best-of-N mining + a confound: the alt's own momentum gated strictly better than BTC's. |
+| Maker corner "0 fills — cell empty" | A **gate bug** in our own harness. Fixed, the cell populated with 2254 fills at −0.365 — a *stronger* kill. |
+| σ roll-off "+1.73% mechanical re-rate" | ~81% Simpson's-paradox outcome-mix: winners' asks march to 1 mechanically. Winners-only: +0.003. |
+| "13 fills, +$1.18/fill, 92% win" | All bunched in ~40 minutes = one regime, ~4 effective observations. |
+| Sign-flipping per-coin EV between runs | The Binance-vs-Chainlink settlement basis flips ~5% of boundary outcomes — label noise bigger than the candidate signals. |
+
+The catalog of these traps — loss-light CIs, multiplicity, priced-variable confounds, adverse selection, outcome-conditioned exits, settlement-proxy noise — plus the checks that catch each one, is distilled in [`FIELD-NOTES.md`](FIELD-NOTES.md). If you read one file, read that one: it transfers to any data-driven, adversarial, cost-bearing decision problem, not just this market.
+
+## The durable asset: the method
+
+The negative result is not what this repo is for. The **method** is:
+
+- **[`analysis/stats.py`](analysis/stats.py)** — the rigor gate every idea must pass: fee-aware net-EV residual test, window-clustered bootstrap CI, Šidák deflation for the honest program-wide trial count, PSR/DSR for the negative skew, and a hard `n_loss ≥ 30` floor (below it the verdict is INSUFFICIENT, never a pass).
+- **The second-mind protocol** — every positive result gets an independent adversarial pass whose only job is to refute it. It killed candidates that survived p=0.002 permutation tests, and twice caught bugs in our own rigor tooling.
+- **The fair-value-maker detector** — the single check that would have saved the whole year: regress the venue's mid on a public fair-value reference and time the requotes. R² > 0.85 + sub-second requoting = a maker is home = the venue is walled for you. Minutes to run, on free data, before building anything.
+- **The two-stage validation split** — "does the signal EXIST" (testable deep and cheap on years of free spot data) vs "does it BEAT the quote + fee" (only scarce live capture answers). Never let stage 1 stand in for stage 2.
+
+## Repository map
+
+| Path | What's in it |
+|---|---|
+| [`VERDICT.md`](VERDICT.md) | **Start here.** The final verdict + the casino-structure analysis |
+| [`POSTMORTEM.md`](POSTMORTEM.md) | Every candidate through the corrected gate, with numbers |
+| [`FIELD-NOTES.md`](FIELD-NOTES.md) | The transferable principles (discovery, rigor, microstructure, process) |
+| `collector.py`, `ws_collector.py`, `supervisor.py`, `storage.py`, `feeds.py`, `coins.py` | The **data collector**: hybrid WebSocket + REST capture of all 6 coins' order books, trades, and spot feeds into per-coin SQLite |
+| `analysis/` | The rigor module (`stats.py`), fee-aware EV, calibration, fair-value, exit maps, the deep spot-history store, the lead-lag harness |
+| `experiments/` | The on-market experiment harnesses (favorite-tail, maker-noise, over-round gate, settlement basis, …) |
+| `dead_ends/` | Proven-dead experiments, archived with *why* they died |
+| `ideas_old/` | Parked ideas — real-but-fee-capped, each with a written revisit trigger |
+| `winning_strategies/` | The honest tiered roster (Tier 1 "deployable winner" = **empty**, by design) |
+| `execution/` + `exec_engine/` | The gated executor (paper + live scaffolding). **Never armed** — no edge cleared validation |
+| `side_quests/` | The same rigor applied elsewhere: Kalshi favorite-longshot scout, NQ/ES SMT break test, whale copy-trading tests (all dead too) |
+| `docs/` | The full session logs: lab notebook, idea audits, external research sweeps, maker-model reverse-engineering |
+
+## The collector (reusable even if you disagree with the verdict)
+
+The capture infrastructure is solid, standalone, and still running daily. Stdlib-only REST collector + a `websockets`-based CLOB market-channel recorder, per coin, with auto-restart supervision:
+
 ```sh
-python menu.py
-```
-A numbered menu to do everything — inspect data, generate the exit maps and round
-charts, run the analyses, paper-trade, and start/stop the collectors. (Use Python
-3.10+ — the installed `AppData\Local\Python` 3.14 is correct; a Visual Studio
-Python 3.9 will NOT run the 3.10+ syntax.) Don't run TWO supervisors at once — the
-menu's "Start" checks first to avoid duplicates.
-
-Two notable menu features:
-- **Create NEW database** — archives the current `btc_updown.db` into `old_dbs/`
-  (timestamped) and starts a fresh empty one; the collectors restart automatically.
-- **Analysis scope** — every analysis first asks `[1] current fresh DB` or
-  `[2] last X days`. Option 2 merges the current DB **and** every archive in
-  `old_dbs/` over the chosen window (env `BTC_ANALYSIS_DAYS`), so you can analyse
-  across database resets. (Price analyses only — the WS stream tables aren't merged.)
-
-### Or drive it directly
-
-**Use the supervisor — it is the single entry point and keeps everything alive
-until you stop it.** Do NOT run `collector.py` by hand in a terminal: a foreground
-process dies when the terminal closes (that looks like "it auto-stops"). The
-supervisor runs detached, restarts any child that exits, and survives terminal
-closes.
-
-```sh
-pip install -r requirements.txt   # websockets (needed by ws_collector only)
-
-python supervisor.py       # starts + supervises collector + ws_collector + viewer
-```
-Stop everything: create an empty file named `STOP` in this folder, or Stop-Process
-the supervisor PID. To launch detached on Windows so it survives the terminal:
-`Start-Process python -ArgumentList "supervisor.py" -WindowStyle Hidden`.
-
-Watch / inspect (read-only, run anytime):
-```sh
-python peek.py             # CLI summary (incl. ws stream counts)
-python peek.py windows     # one row per 5-min market (strike / final / resolution)
-# live dashboard: open http://127.0.0.1:8765 in a browser
+pip install -r requirements.txt     # just `websockets`
+python supervisor.py                # collector + ws_collector per enabled coin + live viewer
+python peek.py --coin eth           # inspect a coin's DB
+ANALYSIS_COIN=sol python -m analysis.fairvalue   # any analysis, scoped per coin
 ```
 
-The individual processes (`collector.py`, `ws_collector.py`, `viewer.py`) can be
-run standalone for debugging, but for normal use let the supervisor own them.
+Each coin writes `data/<coin>/live.db` (SQLite): per-window strike/final/official-resolution rows, 1/s odds snapshots with top-10 depth, and the full order-book event stream (`book`/`price_change`/trade prints) plus Binance bookTicker ticks. The slug **is** the window-start timestamp, so market discovery is pure arithmetic — no scraping. Note the WS stream is high-volume (tens of GB/day/coin raw; 3-day retention on the bulky tables by default).
 
-`collector.py` and `peek.py` are pure standard library; `ws_collector.py` needs
-`websockets`. The WS feed is high-volume (~tens of GB/day in an active market) —
-see the data-retention note below.
+## What would change the verdict
 
-### Why both?
+Re-open only on a concrete trigger, never on a hunch:
 
-The Polymarket market WebSocket has a documented "silent freeze" failure mode
-(stays connected and PING-healthy but stops sending data for hours), during which
-the REST endpoints keep working. So the REST poller is the redundant safety net,
-not redundant work. The WebSocket captures every sub-second order placement,
-cancel, and fill — which 1/second REST polling fundamentally cannot.
+1. **Materially lower fees**, or a demonstrably fee-free maker path that beats adverse selection.
+2. **Months more data** — the binding constraint everywhere was the loser count (8–36). The pre-registered, params-locked candidates re-gate when losers ≥ 30–50; only a *deflated* pass counts.
+3. **A Chainlink settlement adapter** (the markets settle on Chainlink; we captured Binance/Pyth proxies) — removes the boundary label-noise that currently swamps marginal signals.
+4. **A different product** — the real path. A venue with a weak counterparty, an un-priced signal, a fee that doesn't tax the edge out, or a role other than "bettor against the house."
 
-## Data model (`btc_updown.db`, SQLite)
+---
 
-- **`windows`** — one row per 5-minute market: `strike_binance/pyth`,
-  `final_binance/pyth`, `our_outcome` (final ≥ strike), `resolved_outcome`
-  (official), `partial` (1 if we joined mid-window so the strike isn't exact).
-- **`snapshots`** — the time series: `ts` (unix epoch) + `ts_utc` (exact global
-  time, ISO-8601 UTC, ms precision), `time_left`, `up_*`/`down_*` odds,
-  `up_book`/`down_book` (JSON depth), `btc_binance`, `btc_pyth`.
-
-Join them on `window_start`.
-
-## Important caveat: resolution source
-
-These markets settle on the **Chainlink BTC/USD data stream**
-(<https://data.chain.link/streams/btc-usd>), which is auth-gated. We log
-**Binance spot** and **Pyth** as proxies — they track Chainlink within a few
-dollars, but the basis matters near the window boundary. Before trusting a
-strategy, measure each proxy against `resolved_outcome` to see which best
-predicts the official result. A Chainlink adapter can drop into `feeds.py` later.
-
-## Files
-
-- `feeds.py` — data sources (Gamma, CLOB, Binance, Pyth)
-- `storage.py` — SQLite schema + writers (REST tables + WS stream tables)
-- `collector.py` — REST loop + fallback (windows/strike/final/resolution)
-- `ws_collector.py` — real-time WebSocket capture (book events, trades, BTC ticks)
-- `peek.py` — inspect captured data (CLI)
-- `viewer.py` — live browser dashboard (zero-dep, stdlib http.server)
-- `requirements.txt` — `websockets` (for `ws_collector.py`)
-- `ANALYSIS.md` — methodology blueprint for the analysis layer
-- `STRATEGY-MEAN-REVERSION.md` — assessment of the buy-the-dip/reversion idea
+*Built with Claude Code across ~40 experiments and several second-mind adversarial reviews. The edge may not exist — the discipline that tells you so, cheaply and honestly, is the thing worth keeping.*

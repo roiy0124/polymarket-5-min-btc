@@ -17,7 +17,7 @@ At a fixed decision time late in each 5-min window (**time_left ≈ 30s**):
    ⇒ the taker fee bites only the ENTRY (`0.07·ask·(1−ask)`, ~0.2% at ask≈0.97).
 
 One position per window. High coverage, high win-rate, fee only on entry.
-Reproduce: `python experiment_favorite_tail.py --coin all --min-ask 0.95 --tl 30`.
+Reproduce: `python experiments/experiment_favorite_tail.py --coin all --min-ask 0.95 --tl 30`.
 
 ## Performance (causal backtest, net of taker entry fee, window-clustered bootstrap CI)
 | coin | n | win% | mean ask | EV/$1 | 95% CI |
@@ -53,10 +53,10 @@ Stack a **forward-underpricing** signal that the calibrated quote hasn't yet abs
 Tier 3 of this folder, awaiting fresh-data proof:
 - **B risk-filter** — SKIP an alt entry when BTC's last ~15s move OPPOSES the favorite (cuts boundary-flip losers
   the alt quote hasn't repriced from BTC's lead). Real direction (permutation p=0.002) but pre-registered, not yet
-  deployable. Re-test: `python validate_b_riskfilter.py` (params LOCKED).
+  deployable. Re-test: `python experiments/validate_b_riskfilter.py` (params LOCKED).
 - **Spot cross-asset lead-lag** — same BTC-leads-alt mechanism, now confirmed real+stable on 5.5yr-deep spot
   (Stage 1). Needs Stage-2 proof that SOL's *quote* lags enough to beat the fee. `analysis/spot_leadlag.py`.
 
 **Do NOT** adopt the in-sample oracle cutoff or any per-coin/per-hour argmax threshold — documented overfit trap
-(oracle − adaptive ≈ +0.0095 of pure look-ahead that vanishes live). `live_runner.py` stays GATED until a stacked
+(oracle − adaptive ≈ +0.0095 of pure look-ahead that vanishes live). `execution/live_runner.py` stays GATED until a stacked
 edge clears a clean pre-registered OOS test.

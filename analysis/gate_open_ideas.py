@@ -45,7 +45,7 @@ def gate_token_fear_follow():
 def gate_b_riskfilter():
     _hdr("B RISK-FILTER  (skip alt favorite-tail when BTC's last 15s opposes the favorite)")
     import time, calendar
-    from experiment_b_component import load_persec, Series, load_alt_positions
+    from experiments.experiment_b_component import load_persec, Series, load_alt_positions
     TL, MIN_ASK, L = 30.0, 0.95, 15
     PREREG = calendar.timegm(time.strptime("2026-06-23T18:20:00Z", "%Y-%m-%dT%H:%M:%SZ"))
     ALTS = [c for c in coins.ENABLED if c != "btc"]
@@ -70,8 +70,8 @@ def gate_b_riskfilter():
 def gate_spike_fade():
     _hdr("SPIKE-GATED FADE  (fade alt token dump coinciding w/ idiosyncratic spot down-spike z<-3)")
     try:
-        from experiment_fear_dip import load_all
-        from experiment_spike_fade import spot_z_lookups, scan
+        from experiments.experiment_fear_dip import load_all
+        from experiments.experiment_spike_fade import spot_z_lookups, scan
         data, meta = load_all(coins.ENABLED)
         lk = spot_z_lookups("2026-06", 300.0)
         _, spike_dumps, _ = scan(data, meta, lk, 0.05, 3.0, (0.20, 0.85))

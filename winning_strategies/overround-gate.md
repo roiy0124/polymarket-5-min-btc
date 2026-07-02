@@ -17,7 +17,7 @@ At **time_left ≈ 30s** in each 5-min window:
 3. **GATE (self-normalizing, recommended):** trade only if `over_round = up_ask + down_ask − 1` is in the TIGHT HALF of its OWN trailing distribution **for that coin** (rolling percentile ≤ 0.5, lookback 200). Equivalently the fixed form `over_round ≤ 0.012`, but the relative form tracks regime drift with no fitted constant. Skip if wide (makers defensive = flip risk).
 4. **Taker-BUY** the favorite, **HOLD to 0/1** (fee only on entry). One position per window.
 
-Reproduce: `python experiment_overround_gate.py --adaptive` (includes the joint-control anti-confound test + drift monitor).
+Reproduce: `python experiments/experiment_overround_gate.py --adaptive` (includes the joint-control anti-confound test + drift monitor).
 
 ## Adaptivity (so it doesn't fall behind over time — second-mind reviewed)
 The gate's `over_round` threshold is an absolute **spread** in a quantity whose scale is ~5× different
@@ -67,7 +67,7 @@ stacking a margin gate ON TOP of the over-round gate adds **nothing tradable**: 
 P=0.52), because the two signals cut the SAME losers (Jaccard 0.45 — near-strike windows are both
 low-margin AND wide-over-round). Lesson: orthogonal-as-signal ≠ orthogonal-in-which-losers-it-cuts. So
 margin stays a confirmed *covariate of flip-risk*, not a second gate; the single over-round gate remains
-the robust primary. `experiment_favtail_stack.py` is the additivity diagnostic.
+the robust primary. `experiments/experiment_favtail_stack.py` is the additivity diagnostic.
 
 ### Tested extension — maker entry in the gated windows (2026-06-26, breakeven, the FIRST non-adverse maker)
 A structural bonus of this gate: it identifies windows where MAKER provision on the favorite is *fair*, not
@@ -82,6 +82,6 @@ becomes attractive only if Down-side spreads widen (more spread to save) or fill
 finds maker-safe windows — a real, reusable structural fact.
 
 Do NOT re-tune `or_thresh`, `ask` band, or `tl` on this data (overfit trap — the B-filter died on its
-in-sample discovery). `live_runner.py` stays GATED. This is the best lead since the program walled —
+in-sample discovery). `execution/live_runner.py` stays GATED. This is the best lead since the program walled —
 because its kill is **cost + power, not a falsified mechanism** (the mechanism passed the test that
 falsified B).
