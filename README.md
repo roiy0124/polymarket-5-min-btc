@@ -40,6 +40,29 @@ Four structural walls, measured — not assumed:
 
 The interesting nuance: this makes the product **skill-proofed, not skill-less** — the roulette analogy and where it breaks is worked through in [`VERDICT.md`](VERDICT.md).
 
+## The opponent we fought the whole time: one formula
+
+In the end, the entire program was a fight against a single equation. The market-maker quotes every 5-minute market as a **driftless Black–Scholes digital option** — the cash-or-nothing price `N(d₂)`, a direct descendant of Bachelier's 1900 model:
+
+$$P(\text{Up}) \;=\; \Phi\!\left(\frac{\ln(\text{spot}/\text{strike})}{\sigma\sqrt{t}}\right)$$
+
+where `spot` = the live Binance price, `strike` = the price at window start, `t` = time to resolution, `σ` = its trailing realized-vol estimate, and `Φ` = the standard normal CDF.
+
+We reverse-engineered it ([`experiments/phase0_fit.py`](experiments/phase0_fit.py), [`docs/MAKER-MODEL.md`](docs/MAKER-MODEL.md)): the fit explains **R² = 0.91** of the quote (BTC/ETH/DOGE); the bot pads its vol ~15% (its margin of safety), tracks realized vol at corr +0.74, requotes sub-second, and runs Up and Down as one synthetic mirror book. Then we attacked **every input of the formula**, one at a time:
+
+| Input / face | The attack | Why it failed |
+|---|---|---|
+| `spot` | Out-speed its feed (a real ~1s lag, worth ~+0.6%/$1 per second) | The taker fee was engineered to tax exactly this |
+| `σ` — level | Harvest its ~15% vol padding (a VRP trade) | Self-priced: the bot charges its own confidence into the ask |
+| `σ` — staleness | Catch its σ lagging a fast vol-regime change | It's the latency-lag in disguise; re-measure the ask fresher and the signal flips sign |
+| Model **form** | A symmetric Φ cannot encode skew (the 3rd moment) — theory says the underdog is mispriced | The maker prices the skew anyway (n_loss = 412 — a fully-powered kill) |
+| Its defenses | Trade the vol circuit-breaker / the one-sided book it leaves behind | It steps away from *informed* flow; providing the abandoned liquidity = adverse selection |
+| Its inventory | Fade calm depth-imbalance (inventory-reversion) | Depth imbalance predicts *continuation*, never reversion — at every condition |
+| `strike`, `t` | — | Deterministic and public; nothing to attack |
+| Its settlement feed | The Binance-vs-Chainlink basis (prices off one, settles on the other) | Margin cherry-pick; the proxy disagreement exceeds the edge it needs |
+
+The two documented traders who publicly attempted this market before us (Patange and "BenjaminCup") quit from fatigue without ever fitting the maker's model — no fair-value reconstruction, hardcoded σ. We actually fit it, decomposed it, and attacked each string — and the honest answer is that **the bot makes no exploitable mistake**: its quote is fair value, its errors are self-priced, and its liquidity decisions are correct defenses. Beating this market means out-pricing that equation after fees, sub-second, forever. Full campaign log: [`docs/MAKER-MODEL.md`](docs/MAKER-MODEL.md) and [`docs/maker_behavior.md`](docs/maker_behavior.md).
+
 ## How we fooled ourselves (and got caught)
 
 The difficulties were not data plumbing — they were statistical self-deceptions. Every one of these looked like a real edge at first:
