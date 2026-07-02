@@ -1,5 +1,7 @@
 # Field Notes from a Walled Research Program
 
+*Author: Roie Itzhakov — © 2026, [CC BY 4.0](LICENSE)*
+
 *A 4-day pass (capping a ~year-long hunt) for a profitable retail edge on Polymarket's 5-minute crypto up/down markets. The verdict was a clean **WALL**: the market is efficient-on-knowledge (Grossman-Stiglitz), fee-taxed exactly where an edge would live, and quoted by a single fair-value market-maker that makes no exploitable mistakes — there is no deployable retail edge. That negative result is not the asset. The **method** that produced it — the discipline that killed dozens of seductive false positives, plus the handful of checks that would have saved a year if known on day one — is. What follows is the transferable residue: portable to a sibling trading project, or to any data-driven, adversarial, cost-bearing decision problem.*
 
 ---

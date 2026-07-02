@@ -1,5 +1,7 @@
 # POST-MORTEM — Is there a retail edge in Polymarket "Crypto Up/Down (5-minute)"?
 
+*Author: Roie Itzhakov — © 2026, [CC BY 4.0](LICENSE)*
+
 **Verdict (rigor-corrected, 2026-06-25): No edge survives an honest test. The market is walled for
 retail takers.** Every candidate fails once you (a) charge the verified fee, (b) account for the −100%
 binary skew, (c) deflate for the hundreds of trials we ran, and (d) use the effective (not nominal)

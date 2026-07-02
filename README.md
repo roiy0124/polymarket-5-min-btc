@@ -1,5 +1,7 @@
 # Is there a retail edge in Polymarket's 5-minute crypto markets?
 
+*A research program by **Roie Itzhakov***
+
 **Answer, after a full research program: NO — and this repo is the honest proof.**
 
 This is a complete, self-contained quant research program on Polymarket's *"Bitcoin (and ETH/SOL/XRP/DOGE/BNB) Up or Down — 5 minute"* markets: a purpose-built high-frequency data collector, ~40 experiment harnesses, a proper statistical rigor module, and the final verdict — **the market is walled for retail takers**. Every candidate edge fails an honest test once you charge the verified live fee, respect the −100%-on-miss binary payoff, deflate for the hundreds of configurations tried, and use the effective (clustered) sample size.
@@ -103,5 +105,11 @@ Re-open only on a concrete trigger, never on a hunch:
 4. **A different product** — the real path. A venue with a weak counterparty, an un-priced signal, a fee that doesn't tax the edge out, or a role other than "bettor against the house."
 
 ---
+
+## Author & license
+
+**© 2026 Roie Itzhakov.** I stand behind every claim in this repository — the measurements, the methodology, and the verdict.
+
+This work (the research, documents, data-collection code, and experiment harnesses) is licensed under [**Creative Commons Attribution 4.0 International (CC BY 4.0)**](LICENSE): you are free to share, adapt, and build on it — including commercially — **provided you give appropriate credit to Roie Itzhakov**, link to the license, and indicate if changes were made.
 
 *Built with Claude Code across ~40 experiments and several second-mind adversarial reviews. The edge may not exist — the discipline that tells you so, cheaply and honestly, is the thing worth keeping.*

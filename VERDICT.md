@@ -1,5 +1,7 @@
 # THE VERDICT — the wall, and why this market is a casino, not a skill game
 
+*Author: Roie Itzhakov — © 2026, [CC BY 4.0](LICENSE)*
+
 **Final result of the research program (2026-06-25, rigor-corrected; reconfirmed on fresh data through
 2026-06-28): there is no demonstrable retail edge in Polymarket's "Crypto Up/Down (5-minute)" markets.
 The market is WALLED.** Every candidate fails an honest test once you (a) charge the verified live fee on
